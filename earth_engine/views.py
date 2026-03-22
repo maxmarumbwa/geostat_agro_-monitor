@@ -57,7 +57,7 @@ def rainfall_raster(request):
         # Use daily CHIRPS with a single date
         rainfall = (
             ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
-            .filterDate("2023-03-20", "2023-03-21")
+            .filterDate("2024-03-20", "2024-03-21")
             .select("precipitation")
             .mean()
         )
@@ -84,6 +84,62 @@ def rainfall_raster(request):
         context = {"error": str(e)}
 
     return render(request, "rainfall_raster.html", context)
+
+
+# clip rainfall raster to zimbabwe
+import json
+import ee
+from django.shortcuts import render
+from django.conf import settings
+from pathlib import Path
+
+
+def rainfall_zimbabwe(request):
+    """Display CHIRPS rainfall for Zimbabwe - Fast version"""
+    try:
+        # Simple bounding box for Zimbabwe
+        zimbabwe_bounds = ee.Geometry.Rectangle([25, -22.5, 33, -15.5])
+
+        # Get CHIRPS rainfall
+        rainfall = (
+            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate("2023-03-20", "2023-03-21")
+            .select("precipitation")
+            .mean()
+        )
+
+        # Simple bounds instead of complex clipping
+        rainfall_region = rainfall.clip(zimbabwe_bounds)
+
+        # Visualization
+        vis_params = {
+            "min": 0,
+            "max": 60,
+            "palette": ["ffffcc", "a1dab4", "41b6c4", "2c7fb8", "253494"],
+        }
+
+        map_id = rainfall_region.getMapId(vis_params)
+        tile_url = map_id["tile_fetcher"].url_format
+
+        # Load GeoJSON for boundary display only (not for clipping)
+        geojson_path = (
+            Path(settings.BASE_DIR) / "static" / "geojson" / "zimadm1.geojson"
+        )
+        with open(geojson_path, "r") as f:
+            geojson_data = json.load(f)
+
+        context = {
+            "tile_url": tile_url,
+            "date": "March 20, 2023",
+            "center_lat": -19,
+            "center_lng": 29,
+            "geojson_data": json.dumps(geojson_data),
+        }
+
+    except Exception as e:
+        context = {"error": str(e)}
+
+    return render(request, "rainfall_zimbabwe.html", context)
 
 
 # NDVI calculation
