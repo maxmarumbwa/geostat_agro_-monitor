@@ -1,0 +1,7 @@
+django
+djangorestframework
+python-dotenv
+earthengine-ap
+geemap
+geopandas
+shapely

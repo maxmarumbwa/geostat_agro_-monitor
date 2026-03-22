@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Crop Health Monitor - NDVI Analysis</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+
+        .card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #27ae60;
+        }
+
+        .metric {
+            display: inline-block;
+            width: 45%;
+            margin: 10px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #27ae60;
+        }
+
+        .metric-label {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+
+        .status-excellent {
+            background: #27ae60;
+            color: white;
+        }
+
+        .status-good {
+            background: #f39c12;
+            color: white;
+        }
+
+        .status-moderate {
+            background: #e67e22;
+            color: white;
+        }
+
+        .status-poor {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .info {
+            background: #3498db;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .metric {
+                width: 100%;
+                margin: 10px 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🌾 Crop Health Monitor</h1>
+        <div class="subtitle">NDVI Analysis for Agricultural Monitoring</div>
+
+        {% if error %}
+        <div class="error">
+            ❌ Error: {{ error }}
+        </div>
+        {% else %}
+        <div class="card">
+            <h3>📍 Farm Information</h3>
+            <p><strong>Farm:</strong> {{ farm_area }}</p>
+            <p><strong>Image Date:</strong> {{ image_date }}</p>
+        </div>
+
+        <div>
+            <div class="metric">
+                <div class="metric-value">{{ ndvi_mean }}</div>
+                <div class="metric-label">Mean NDVI Value</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{{ ndvi_std }}</div>
+                <div class="metric-label">NDVI Standard Deviation</div>
+            </div>
+        </div>
+
+        <div class="status status-{{ health_status|lower|cut:' '|cut:'🌟'|cut:'✅'|cut:'⚠️'|cut:'❌'|cut:'🏝️' }}">
+            🌿 Crop Health Status: {{ health_status }}
+        </div>
+
+        <div class="info">
+            <strong>What is NDVI?</strong> NDVI (Normalized Difference Vegetation Index) measures vegetation health.
+            Values range from -1 to 1, with higher values indicating healthier, denser vegetation.
+        </div>
+        {% endif %}
+    </div>
+</body>
+
+</html>
