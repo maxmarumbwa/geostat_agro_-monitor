@@ -64,8 +64,12 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Custom apps
     "satellite_analytics_engine",
     "earth_engine",
+    "maps",
+    "analytics",
+    "api",
     "rest_framework",
 ]
 
