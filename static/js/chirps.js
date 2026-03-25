@@ -1,37 +1,23 @@
-<!DOCTYPE html>
-<html>
-
-<head>
-    <title>CHIRPS Rainfall - Zimbabwe</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-</head>
-
-<body>
-    <h1>🌧️ CHIRPS Daily Rainfall - Zimbabwe (March 20, 2024)</h1>
-    <div id="map" style="width: 60%; height: 600px;"></div>
-
-    <script>
-        var map = L.map('map').setView([{{ center_lat }}, { { center_lng } }], 6);
-
+        var map = L.map('map').setView([{{ center_lat }}, {{ center_lng }}], 6);
+        
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
             attribution: '© CartoDB'
         }).addTo(map);
-
+        
         {% if error %}
-        document.write('<p style="color:red">Error: {{ error }}</p>');
+            document.write('<p style="color:red">Error: {{ error }}</p>');
         {% else %}
-        // Add CHIRPS rainfall raster (clipped to Zimbabwe)
-        L.tileLayer('{{ tile_url|safe }}', {
-            attribution: '© CHIRPS | Google Earth Engine',
-            opacity: 0.8,
-            maxZoom: 10
-        }).addTo(map);
+            // Add CHIRPS rainfall raster (clipped to Zimbabwe)
+            L.tileLayer('{{ tile_url|safe }}', {
+                attribution: '© CHIRPS | Google Earth Engine',
+                opacity: 0.8,
+                maxZoom: 10
+            }).addTo(map);
         {% endif %}
-
+        
         // Add Zimbabwe boundary from GeoJSON
-        var geojsonData = {{ geojson_data| safe }};
-
+        var geojsonData = {{ geojson_data|safe }};
+        
         function style(feature) {
             return {
                 color: '#ff4444',
@@ -41,21 +27,21 @@
                 dashArray: '3'
             };
         }
-
+        
         L.geoJSON(geojsonData, {
             style: style,
-            onEachFeature: function (feature, layer) {
+            onEachFeature: function(feature, layer) {
                 var name = feature.properties?.NAME_1 || feature.properties?.ADM1_NAME || 'Zimbabwe';
                 layer.bindPopup('<b>' + name + '</b><br>Rainfall data: CHIRPS Daily');
             }
         }).addTo(map);
-
+        
         // Fit map to Zimbabwe bounds
         map.fitBounds([[{{ bounds_sw_lat }}, {{ bounds_sw_lng }}], [{{ bounds_ne_lat }}, {{ bounds_ne_lng }}]]);
-
+        
         // Legend
-        var legend = L.control({ position: 'bottomright' });
-        legend.onAdd = function (map) {
+        var legend = L.control({position: 'bottomright'});
+        legend.onAdd = function(map) {
             var div = L.DomUtil.create('div');
             div.style.background = 'white';
             div.style.padding = '10px';
@@ -70,10 +56,10 @@
             return div;
         };
         legend.addTo(map);
-
+        
         // Date info
-        var info = L.control({ position: 'topright' });
-        info.onAdd = function (map) {
+        var info = L.control({position: 'topright'});
+        info.onAdd = function(map) {
             var div = L.DomUtil.create('div');
             div.innerHTML = '<b>📅 {{ date }}</b><br>CHIRPS Daily Data<br>Clipped to Zimbabwe';
             div.style.background = 'white';
@@ -83,7 +69,3 @@
             return div;
         };
         info.addTo(map);
-    </script>
-</body>
-
-</html>

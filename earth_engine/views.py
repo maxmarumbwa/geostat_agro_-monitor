@@ -51,10 +51,92 @@ def rainfall_zimbabwe(request):
     except Exception as e:
         context = {"error": str(e)}
 
-    return render(request, "dashboard/index.html", context)
-    # return render(request, "rainfall_zimbabwe.html", context)
+    # return render(request, "dashboard/index.html", context)
+    return render(request, "rainfall_zimbabwe.html", context)
 
 
+#
+##########################################################################
+#############               FIXED DATES              ###########
+##########################################################################
+
+# # clip rainfall raster to zimbabwe
+# import json
+# import ee
+# from django.shortcuts import render
+# from django.conf import settings
+# from pathlib import Path
+
+
+# def rainfall_zimbabwe(request):
+#     """Display CHIRPS rainfall for Zimbabwe - Fast version"""
+#     try:
+#         # Simple bounding box for Zimbabwe
+#         zimbabwe_bounds = ee.Geometry.Rectangle([20, -23.8, 38, -13.7])
+
+#         # Get CHIRPS rainfall
+#         rainfall = (
+#             ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+#             .filterDate("2023-03-20", "2023-03-21")
+#             .select("precipitation")
+#             .mean()
+#         )
+
+#         # Simple bounds instead of complex clipping
+#         rainfall_region = rainfall.clip(zimbabwe_bounds)
+
+#         # Visualization
+#         vis_params = {
+#             "min": 0,
+#             "max": 60,
+#             "palette": ["ffffcc", "a1dab4", "41b6c4", "2c7fb8", "253494"],
+#         }
+
+#         map_id = rainfall_region.getMapId(vis_params)
+#         tile_url = map_id["tile_fetcher"].url_format
+
+#         # Load GeoJSON for boundary display only (not for clipping)
+#         geojson_path = (
+#             Path(settings.BASE_DIR) / "static" / "geojson" / "zimadm1.geojson"
+#         )
+#         with open(geojson_path, "r") as f:
+#             geojson_data = json.load(f)
+
+#         context = {
+#             "tile_url": tile_url,
+#             "date": "March 20, 2024",
+#             "center_lat": -19,
+#             "center_lng": 29,
+#             "geojson_data": json.dumps(geojson_data),
+#         }
+
+#     except Exception as e:
+#         context = {"error": str(e)}
+
+#     # return render(request, "dashboard/index.html", context)
+#     return render(request, "rainfall_zimbabwe.html", context)
+
+#############               FIXED DATES  END            ###########
+
+
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 def test(request):
     return render(request, "test.html")
 
@@ -70,7 +152,7 @@ def satellite_view(request):
     """Display a satellite image from Earth Engine"""
     image = (
         ee.ImageCollection("COPERNICUS/S2")
-        .filterDate("2025-01-01", "2025-12-31")
+        .filterDate("2025-01-01", "2026-01-31")
         .filterBounds(ee.Geometry.Point([30.0, -1.0]))
         .first()
     )
@@ -108,17 +190,9 @@ def satellite_view(request):
     return render(request, "satellite.html", context)
 
 
-# Rainfall map visualisation
-import ee
-from django.shortcuts import render
-
 #
 #
-#
-#
-#
-
-
+# #
 # View to display rainfall raster
 def rainfall_raster(request):
     """Display CHIRPS daily rainfall raster for Malawi"""
@@ -126,7 +200,7 @@ def rainfall_raster(request):
         # Use daily CHIRPS with a single date
         rainfall = (
             ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
-            .filterDate("2024-03-20", "2024-03-21")
+            .filterDate("2025-12-20", "2025-12-21")
             .select("precipitation")
             .mean()
         )
@@ -152,8 +226,63 @@ def rainfall_raster(request):
     except Exception as e:
         context = {"error": str(e)}
 
-    # return render(request, "rainfall_raster.html", context)
-    return render(request, "test.html", context)
+    return render(request, "rainfall_raster.html", context)
+    # return render(request, "test.html", context)
+
+
+################################  with date selector ########################################
+
+from datetime import datetime, timedelta
+
+
+def rainfall_raster(request):
+    """Display CHIRPS daily rainfall raster for Malawi"""
+    try:
+        # Get date from request
+        selected_date = request.GET.get("date", "2025-12-20")
+
+        # Convert to EE format
+        start_date = datetime.strptime(selected_date, "%Y-%m-%d")
+        end_date = start_date + timedelta(days=1)
+
+        # Format for Earth Engine
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = end_date.strftime("%Y-%m-%d")
+
+        # Load CHIRPS data
+        rainfall = (
+            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate(start_str, end_str)
+            .select("precipitation")
+            .mean()
+        )
+
+        # Malawi boundary
+        malawi = ee.Geometry.Polygon(
+            [[[32.7, -17.1], [35.9, -17.1], [35.9, -9.4], [32.7, -9.4], [32.7, -17.1]]]
+        )
+
+        rainfall_clipped = rainfall.clip(malawi)
+
+        vis_params = {
+            "min": 0,
+            "max": 60,
+            "palette": ["ffffcc", "a1dab4", "41b6c4", "2c7fb8", "253494"],
+        }
+
+        map_id = rainfall_clipped.getMapId(vis_params)
+        tile_url = map_id["tile_fetcher"].url_format
+
+        context = {
+            "tile_url": tile_url,
+            "date": start_date.strftime("%B %d, %Y"),
+            "selected_date": selected_date,
+        }
+
+    except Exception as e:
+        context = {"error": str(e)}
+
+    return render(request, "rainfall_raster.html", context)
 
 
 #
