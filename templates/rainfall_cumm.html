@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rainfall Data Viewer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        /* Your existing styles here */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { font-size: 1.1em; opacity: 0.9; }
+        .content {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 30px;
+            gap: 30px;
+        }
+        .controls {
+            flex: 1;
+            min-width: 300px;
+        }
+        .map-container {
+            flex: 2;
+            min-width: 500px;
+            height: 500px;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        #map { height: 100%; width: 100%; }
+        .form-group { margin-bottom: 20px; }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        input[type="date"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .coordinates {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .coordinates p {
+            margin: 5px 0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .result-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+        .error {
+            background: #fee;
+            border-left-color: #f00;
+            color: #c00;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+        .info-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        @media (max-width: 768px) {
+            .content { flex-direction: column; }
+            .map-container { min-width: auto; height: 400px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌧️ Rainfall Data Viewer</h1>
+            <p>Get cumulative rainfall data for any location and date range</p>
+        </div>
+        
+        <div class="content">
+            <div class="controls">
+                <div class="form-group">
+                    <label for="start_date">Start Date:</label>
+                    <input type="date" id="start_date" name="start_date" value="2021-10-20">
+                </div>
+                
+                <div class="form-group">
+                    <label for="end_date">End Date:</label>
+                    <input type="date" id="end_date" name="end_date" value="2021-12-20">
+                </div>
+                
+                <div class="coordinates">
+                    <label>📍 Selected Location:</label>
+                    <p>Latitude: <span id="lat_display">-17.5547</span></p>
+                    <p>Longitude: <span id="lon_display">27.7075</span></p>
+                    <p class="info-text">Click on the map to change location</p>
+                </div>
+                
+                <button onclick="getRainfallData()">Get Rainfall Data</button>
+                
+                <div id="result" class="result" style="display: none;">
+                    <h3>📊 Rainfall Result</h3>
+                    <div id="result_content"></div>
+                </div>
+            </div>
+            
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let map = L.map('map').setView([-17.5547, 27.7075], 6);
+        let marker;
+        let currentLat = -17.554660013052533;
+        let currentLon = 27.70751953125;
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        marker = L.marker([currentLat, currentLon]).addTo(map);
+        
+        map.on('click', function(e) {
+            currentLat = e.latlng.lat;
+            currentLon = e.latlng.lng;
+            
+            document.getElementById('lat_display').textContent = currentLat.toFixed(6);
+            document.getElementById('lon_display').textContent = currentLon.toFixed(6);
+            
+            marker.setLatLng([currentLat, currentLon]);
+        });
+        
+        async function getRainfallData() {
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            const resultDiv = document.getElementById('result');
+            const resultContent = document.getElementById('result_content');
+            
+            console.log("Fetching data with:", {
+                lat: currentLat,
+                lon: currentLon,
+                start_date: startDate,
+                end_date: endDate
+            });
+            
+            if (!startDate || !endDate) {
+                showError('Please select both start and end dates');
+                return;
+            }
+            
+            if (startDate > endDate) {
+                showError('Start date must be before end date');
+                return;
+            }
+            
+            resultDiv.style.display = 'block';
+            resultContent.innerHTML = '<div class="loading">Loading rainfall data... 🌧️</div>';
+            resultDiv.classList.remove('error');
+            
+            try {
+                const response = await axios.get('/get_rainfall_value/', {
+                    params: {
+                        lat: currentLat,
+                        lon: currentLon,
+                        start_date: startDate,
+                        end_date: endDate
+                    }
+                });
+                
+                console.log("Response:", response.data);
+                
+                if (response.data.error) {
+                    showError(response.data.error);
+                } else {
+                    displayResult(response.data);
+                }
+                
+            } catch (error) {
+                console.error('Error details:', error);
+                if (error.response && error.response.data && error.response.data.error) {
+                    showError(error.response.data.error);
+                } else {
+                    showError('Failed to fetch rainfall data. Check console for details.');
+                }
+            }
+        }
+        
+        function displayResult(data) {
+            const resultContent = document.getElementById('result_content');
+            const rainfallValue = data.rainfall !== null ? data.rainfall.toFixed(2) : 'No data available';
+            
+            resultContent.innerHTML = `
+                <div class="result-value">
+                    ${rainfallValue} mm
+                </div>
+                <p><strong>Location:</strong> ${data.lat.toFixed(6)}°, ${data.lon.toFixed(6)}°</p>
+                <p><strong>Period:</strong> ${data.start_date} to ${data.end_date}</p>
+                <p><strong>Total Rainfall:</strong> ${rainfallValue} mm over the selected period</p>
+                ${data.num_days ? `<p><strong>Number of days:</strong> ${data.num_days}</p>` : ''}
+                <p class="info-text">Data source: CHIRPS Daily (UCSB-CHG)</p>
+            `;
+            
+            document.getElementById('result').classList.remove('error');
+        }
+        
+        function showError(message) {
+            const resultContent = document.getElementById('result_content');
+            resultContent.innerHTML = `
+                <div style="color: #c00;">
+                    <strong>❌ Error:</strong> ${message}
+                </div>
+            `;
+            document.getElementById('result').classList.add('error');
+        }
+        
+        window.addEventListener('load', () => {
+            getRainfallData();
+        });
+    </script>
+</body>
+</html>

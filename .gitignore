@@ -1,3 +1,4 @@
 static/key/*.json
 static/key/ee-key.json
 env/
+draft_html/
