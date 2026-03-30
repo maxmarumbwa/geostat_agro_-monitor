@@ -54,71 +54,13 @@ def rainfall_start_end(request):
     return render(request, "rainfall_start_end.html", context)
 
 
-################################################################################################
-
-
-####################### select 2 dates dates and selector #######################
-#
-################################################################################################
-def rainfall_cum_start_end_select(request):
-    """Display CHIRPS rainfall for Zimbabwe using user-selected date range"""
-    try:
-        # Get user input (default fallback)
-        start_date = request.GET.get("start_date", "2023-01-20")
-        end_date = request.GET.get("end_date", "2023-03-21")
-
-        # Zimbabwe bounds
-        zimbabwe_bounds = ee.Geometry.Rectangle([25, -22.5, 33, -15.5])
-
-        # CHIRPS rainfall (NOW dynamic)
-        rainfall = (
-            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
-            .filterDate(start_date, end_date)
-            .select("precipitation")
-            .sum()  # ✅ cumulative rainfall (IMPORTANT change)
-        )
-
-        rainfall_region = rainfall.clip(zimbabwe_bounds)
-
-        vis_params = {
-            "min": 0,
-            "max": 300,  # increase for cumulative rainfall
-            "palette": ["ffffcc", "a1dab4", "41b6c4", "2c7fb8", "253494"],
-        }
-
-        map_id = rainfall_region.getMapId(vis_params)
-        tile_url = map_id["tile_fetcher"].url_format
-
-        # Load GeoJSON
-        geojson_path = (
-            Path(settings.BASE_DIR) / "static" / "geojson" / "zimadm1.geojson"
-        )
-        with open(geojson_path, "r") as f:
-            geojson_data = json.load(f)
-
-        context = {
-            "tile_url": tile_url,
-            "start_date": start_date,
-            "end_date": end_date,
-            "date": f"{start_date} to {end_date}",
-            "center_lat": -19,
-            "center_lng": 29,
-            "bounds_sw_lat": -22.5,
-            "bounds_sw_lng": 25,
-            "bounds_ne_lat": -15.5,
-            "bounds_ne_lng": 33,
-            "geojson_data": json.dumps(geojson_data),
-        }
-
-    except Exception as e:
-        context = {"error": str(e)}
-
-    return render(request, "rainfall_cum_start_end_select.html", context)
+def test(request):
+    return render(request, "test.html")
 
 
 ################################################################################################
 
-####################### With date restriction greyout dates and selector #######################
+#######################Display rainfall with date restriction greyout dates and selector #######################
 #
 ################################################################################################
 
@@ -190,8 +132,72 @@ def rainfall_raster(request):
     return render(request, "rainfall_raster.html", context)
 
 
+#
+################################################################################################
+
+####################### select 2 dates dates and selector #######################
+#
+################################################################################################
+
+
+def rainfall_cum_start_end_select(request):
+    """Display CHIRPS rainfall for Zimbabwe using user-selected date range"""
+    try:
+        # Get user input (default fallback)
+        start_date = request.GET.get("start_date", "2023-01-20")
+        end_date = request.GET.get("end_date", "2023-03-21")
+
+        # Zimbabwe bounds
+        zimbabwe_bounds = ee.Geometry.Rectangle([25, -22.5, 33, -15.5])
+
+        # CHIRPS rainfall (NOW dynamic)
+        rainfall = (
+            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate(start_date, end_date)
+            .select("precipitation")
+            .sum()
+        )
+
+        rainfall_region = rainfall.clip(zimbabwe_bounds)
+
+        vis_params = {
+            "min": 0,
+            "max": 300,  # increase for cumulative rainfall
+            "palette": ["ffffcc", "a1dab4", "41b6c4", "2c7fb8", "253494"],
+        }
+
+        map_id = rainfall_region.getMapId(vis_params)
+        tile_url = map_id["tile_fetcher"].url_format
+
+        # Load GeoJSON
+        geojson_path = (
+            Path(settings.BASE_DIR) / "static" / "geojson" / "zimadm1.geojson"
+        )
+        with open(geojson_path, "r") as f:
+            geojson_data = json.load(f)
+
+        context = {
+            "tile_url": tile_url,
+            "start_date": start_date,
+            "end_date": end_date,
+            "date": f"{start_date} to {end_date}",
+            "center_lat": -19,
+            "center_lng": 29,
+            "bounds_sw_lat": -22.5,
+            "bounds_sw_lng": 25,
+            "bounds_ne_lat": -15.5,
+            "bounds_ne_lng": 33,
+            "geojson_data": json.dumps(geojson_data),
+        }
+
+    except Exception as e:
+        context = {"error": str(e)}
+
+    return render(request, "rainfall_cum_start_end_select.html", context)
+
+
 ##########################################################################
-#############               Get pixel info              ###########
+#############           Get pixel info single date             ###########
 ##########################################################################
 
 from django.http import JsonResponse
@@ -206,10 +212,12 @@ def get_rainfall_value(request):
 
         start_date = datetime.strptime(date, "%Y-%m-%d")
         end_date = start_date + timedelta(days=1)
-
+        print(
+            f"Received parameters: lat={lat}, lon={lon}, start_date={start_date}, end_date={end_date}"
+        )
         rainfall = (
             ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
-            .filterDate("2023-03-20", "2023-03-25")
+            .filterDate(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
             .select("precipitation")
             .mean()
         )
@@ -222,30 +230,37 @@ def get_rainfall_value(request):
 
         rainfall_value = value.getInfo()
 
-        return JsonResponse({"lat": lat, "lon": lon, "rainfall": rainfall_value})
+        return JsonResponse(
+            {
+                "start_date": start_date.strftime("%Y-%m-%d"),
+                "end_date": end_date.strftime("%Y-%m-%d"),
+                "lat": lat,
+                "lon": lon,
+                "rainfall": rainfall_value,
+            }
+        )
 
     except Exception as e:
         return JsonResponse({"error": str(e)})
 
 
-######################################################################################
-
-################## get rainfall value for a specific point and date ##################
-
-######################################################################################
+##########################################################################
+#############           Get pixel info 2 dates             ###########
+##########################################################################
 
 from django.http import JsonResponse
 import ee
 
 
-def get_rainfall_value(request):
+def get_rainfall_value_series(request):
     try:
         lat = float(request.GET.get("lat"))
         lon = float(request.GET.get("lon"))
-        date = request.GET.get("date")
+        selected_start_date = request.GET.get("start_date") or "2023-01-01"
+        selected_end_date = request.GET.get("end_date") or "2023-01-04"
 
-        start_date = datetime.strptime(date, "%Y-%m-%d")
-        end_date = start_date + timedelta(days=1)
+        start_date = datetime.strptime(selected_start_date, "%Y-%m-%d")
+        end_date = datetime.strptime(selected_end_date, "%Y-%m-%d")
 
         rainfall = (
             ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
@@ -262,10 +277,250 @@ def get_rainfall_value(request):
 
         rainfall_value = value.getInfo()
 
-        return JsonResponse({"lat": lat, "lon": lon, "rainfall": rainfall_value})
+        return JsonResponse(
+            {
+                "start_date": start_date,
+                "end_date": end_date,
+                "lat": lat,
+                "lon": lon,
+                "rainfall": rainfall_value,
+            }
+        )
 
     except Exception as e:
         return JsonResponse({"error": str(e)})
+
+
+#
+#
+#
+#
+#
+#
+#
+##
+#
+#
+#
+#
+#
+#
+##
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+
+
+#############################################################################################
+#
+######################  pixel stats for a specific date range  ########################
+#
+##############################################################################################
+
+
+import ee
+from datetime import datetime, timedelta
+from django.shortcuts import render
+
+
+def chirps_pixel_view(request):
+    try:
+        # ---------------------------
+        # 1. Get dates
+        # ---------------------------
+        start_date = request.GET.get("start_date") or "2023-01-01"
+        end_date = request.GET.get("end_date") or "2023-01-05"
+
+        # ---------------------------
+        # 2. Validate CHIRPS delay
+        # ---------------------------
+        today = datetime.today()
+        max_date = today - timedelta(days=20)
+
+        if datetime.strptime(end_date, "%Y-%m-%d") > max_date:
+            return render(
+                request,
+                "pixel_map.html",
+                {"error": "⚠️ Data available only up to ~20 days ago."},
+            )
+
+        # ---------------------------
+        # 3. Load CHIRPS cumulative
+        # ---------------------------
+        rainfall = (
+            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate(start_date, end_date)
+            .select("precipitation")
+            .sum()
+        )
+
+        # ---------------------------
+        # 4. Visualization
+        # ---------------------------
+        vis_params = {
+            "min": 0,
+            "max": 300,
+            "palette": ["white", "blue", "green", "yellow", "red"],
+        }
+
+        map_id = rainfall.getMapId(vis_params)
+        tile_url = map_id["tile_fetcher"].url_format
+
+        # ---------------------------
+        # 5. Pass to template
+        # ---------------------------
+        context = {
+            "tile_url": tile_url,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+
+    except Exception as e:
+        context = {"error": str(e)}
+
+    return render(request, "pixel_map.html", context)
+
+
+#############################################################################################
+#
+######################  District zonal stats for a specific date range  ########################
+#
+##############################################################################################
+
+import json
+import ee
+from datetime import datetime, timedelta
+from django.shortcuts import render
+from django.conf import settings
+from pathlib import Path
+
+
+def zonal_stats_district_rainfall_series(request):
+    try:
+        # ---------------------------
+        # 1. Get user input
+        # ---------------------------
+        start_date = request.GET.get("start_date") or "2023-01-01"
+        end_date = request.GET.get("end_date") or "2023-01-04"
+
+        # ---------------------------
+        # 2. Validate dates
+        # ---------------------------
+        today = datetime.today()
+        max_date = today - timedelta(days=20)
+
+        if datetime.strptime(end_date, "%Y-%m-%d") > max_date:
+            return render(
+                request,
+                "district_dashboard.html",
+                {
+                    "error": "⚠️ End date must be at least 20 days before today (CHIRPS delay)."
+                },
+            )
+
+        if start_date > end_date:
+            return render(
+                request,
+                "district_dashboard.html",
+                {"error": "⚠️ Start date must be before end date."},
+            )
+
+        # ---------------------------
+        # 3. Zimbabwe bounds
+        # ---------------------------
+        zimbabwe_bounds = ee.Geometry.Rectangle([25, -22.5, 33, -15.5])
+
+        # ---------------------------
+        # 4. CHIRPS rainfall (cumulative)
+        # ---------------------------
+        rainfall = (
+            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate(start_date, end_date)
+            .select("precipitation")
+            .sum()
+        )
+
+        rainfall_region = rainfall.clip(zimbabwe_bounds)
+
+        vis_params = {
+            "min": 0,
+            "max": 300,
+            "palette": ["ffffcc", "a1dab4", "41b6c4", "2c7fb8", "253494"],
+        }
+
+        map_id = rainfall_region.getMapId(vis_params)
+        tile_url = map_id["tile_fetcher"].url_format
+
+        # ---------------------------
+        # 5. Load districts
+        # ---------------------------
+        geojson_path = (
+            Path(settings.BASE_DIR) / "static" / "geojson" / "zimadm1.geojson"
+        )
+
+        with open(geojson_path) as f:
+            geojson_data = json.load(f)
+
+        districts = ee.FeatureCollection(geojson_data)
+
+        # ---------------------------
+        # 6. Zonal statistics
+        # ---------------------------
+        stats = rainfall.reduceRegions(
+            collection=districts, reducer=ee.Reducer.sum(), scale=5000
+        )
+
+        stats_info = stats.getInfo()
+
+        district_rainfall = {}
+        for feature in stats_info["features"]:
+            name = feature["properties"].get("ADM1_EN") or feature["properties"].get(
+                "ADM0_EN"
+            )
+            rainfall_sum = feature["properties"].get("sum", 0)
+
+            district_rainfall[name] = round(rainfall_sum, 2)
+
+        # ---------------------------
+        # 7. Context
+        # ---------------------------
+        context = {
+            "tile_url": tile_url,
+            "geojson_data": json.dumps(geojson_data),
+            "district_rainfall": json.dumps(district_rainfall),
+            "start_date": start_date,
+            "end_date": end_date,
+            "center_lat": -19,
+            "center_lng": 29,
+            "bounds_sw_lat": -22.5,
+            "bounds_sw_lng": 25,
+            "bounds_ne_lat": -15.5,
+            "bounds_ne_lng": 33,
+        }
+
+    except Exception as e:
+        context = {"error": str(e)}
+
+    return render(request, "stats_adm1_rfe_series.html", context)
 
 
 ######################################################################################

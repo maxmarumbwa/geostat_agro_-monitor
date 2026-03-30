@@ -1,180 +1,202 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>CHIRPS Rainfall Raster - Zimbabwe</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        #map { width: 90%; height: 800px; margin-top: 10px; }
-        button { margin-left: 5px; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        #map {
+            width: 90%;
+            height: 800px;
+            margin-top: 10px;
+        }
+
+        button {
+            margin-left: 5px;
+        }
     </style>
 </head>
+
 <body>
 
-<h1>🌧️ CHIRPS Daily Rainfall Raster - Zimbabwe: {{ date }}</h1>
+    <h1>🌧️ CHIRPS Daily Rainfall Raster - Zimbabwe: {{ date }}</h1>
 
-<!-- DATE PICKER -->
-<label for="datePicker"><b>Select Date:</b></label>
-<input type="date" id="datePicker" value="{{ selected_date|default:'2021-12-20' }}">
-<button onclick="loadDate()">Load</button>
+    <!-- DATE PICKER -->
+    <label for="datePicker"><b>Select Date:</b></label>
+    <input type="date" id="datePicker" value="{{ selected_date|default:'2021-12-20' }}">
+    <button onclick="loadDate()">Load</button>
 
-<!-- QUERY BUTTON PART OF HTML -->
-<button id="queryBtn" onclick="activateQuery()">🖱️ Query Rainfall</button>
+    <!-- QUERY BUTTON PART OF HTML -->
+    <button id="queryBtn" onclick="activateQuery()">🖱️ Query Rainfall</button>
 
-<!-- MAP -->
-<div id="map"></div>
+    <!-- MAP -->
+    <div id="map"></div>
 
-<script>
-    // =========================
-    // DATE CONTROL
-    // =========================
-    function setMaxDate() {
-        const today = new Date();
-        today.setDate(today.getDate() - 30); // CHIRPS 30-day lag
-        document.getElementById("datePicker").max = today.toISOString().split('T')[0];
-    }
-    setMaxDate();
+    <script>
+        // =========================
+        // DATE CONTROL
+        // =========================
+        function setMaxDate() {
+            const today = new Date();
+            today.setDate(today.getDate() - 30); // CHIRPS 30-day lag
+            document.getElementById("datePicker").max = today.toISOString().split('T')[0];
+        }
+        setMaxDate();
 
-    function loadDate() {
-        const selectedDate = document.getElementById("datePicker").value;
-        if (!selectedDate) {
-            alert("Please select a date");
-            return;
+        function loadDate() {
+            const selectedDate = document.getElementById("datePicker").value;
+            if (!selectedDate) {
+                alert("Please select a date");
+                return;
+            }
+
+            const today = new Date();
+            const selected = new Date(selectedDate);
+            const diffDays = (today - selected) / (1000 * 60 * 60 * 24);
+            if (diffDays < 30) {
+                alert("⚠️ CHIRPS data has a 30-day lag. Please select an older date.");
+                return;
+            }
+
+            window.location.href = "?date=" + selectedDate;
         }
 
-        const today = new Date();
-        const selected = new Date(selectedDate);
-        const diffDays = (today - selected) / (1000*60*60*24);
-        if (diffDays < 30) {
-            alert("⚠️ CHIRPS data has a 30-day lag. Please select an older date.");
-            return;
-        }
+        // =========================
+        // MAP INITIALIZATION
+        // =========================
+        var map = L.map('map').setView([-19.5, 29.0], 7);
 
-        window.location.href = "?date=" + selectedDate;
-    }
+        // Base map
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+            attribution: '© CartoDB'
+        }).addTo(map);
 
-    // =========================
-    // MAP INITIALIZATION
-    // =========================
-    var map = L.map('map').setView([-19.5, 29.0], 7);
+        // Load Zimbabwe administrative boundaries
+        fetch('/static/geojson/zimadm1.geojson')
+            .then(res => res.json())
+            .then(data => {
+                L.geoJSON(data, {
+                    style: { color: '#ff4444', weight: 2, fill: false }
+                }).addTo(map);
+            });
 
-    // Base map
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-        attribution: '© CartoDB'
-    }).addTo(map);
-
-    // Load Zimbabwe administrative boundaries
-    fetch('/static/geojson/zimadm1.geojson')
-        .then(res => res.json())
-        .then(data => {
-            L.geoJSON(data, {
-                style: { color: '#ff4444', weight: 2, fill: false }
-            }).addTo(map);
-        });
-
-    // CHIRPS Tile Layer
-    {% if error %}
+        // CHIRPS Tile Layer
+        {% if error %}
         document.write('<p style="color:red">Error: {{ error }}</p>');
-    {% else %}
+        {% else %}
         L.tileLayer('{{ tile_url|safe }}', {
             attribution: '© CHIRPS | Google Earth Engine',
             opacity: 0.8,
             maxZoom: 10
         }).addTo(map);
-    {% endif %}
+        {% endif %}
 
-    // =========================
-    // QUERY RAINFALL FUNCTIONALITY
-    // =========================
-    let queryMode = false;
-    let clickMarker = null;
+        // =========================
+        // QUERY RAINFALL FUNCTIONALITY
+        // =========================
+        let queryMode = false;
+        let clickMarker = null;
 
-    function activateQuery() {
-        queryMode = !queryMode;
-        const btn = document.getElementById("queryBtn");
+        function activateQuery() {
+            queryMode = !queryMode;
+            const btn = document.getElementById("queryBtn");
 
-        if (queryMode) {
-            btn.innerHTML = "✅ Click map";              // show active state
-            map.getContainer().style.cursor = "crosshair";
-        } else {
-            btn.innerHTML = "🖱️ Query Rainfall";        // revert button
-            map.getContainer().style.cursor = "";
-        }
-    }
-
-    // Map click to get rainfall
-    map.on('click', function(e) {
-        if (!queryMode) return;
-
-        const lat = e.latlng.lat;
-        const lon = e.latlng.lng;
-        const selectedDate = document.getElementById("datePicker").value;
-
-        if (!selectedDate) {
-            alert("Select date first");
-            return;
+            if (queryMode) {
+                btn.innerHTML = "✅ Click map";              // show active state
+                map.getContainer().style.cursor = "crosshair";
+            } else {
+                btn.innerHTML = "🖱️ Query Rainfall";        // revert button
+                map.getContainer().style.cursor = "";
+            }
         }
 
-        if (clickMarker) {
-            map.removeLayer(clickMarker);
-        }
+        // Map click to get rainfall
+        map.on('click', function (e) {
+            if (!queryMode) return;
 
-        clickMarker = L.marker([lat, lon]).addTo(map)
-            .bindPopup("⏳ Loading...")
-            .openPopup();
+            const lat = e.latlng.lat;
+            const lon = e.latlng.lng;
+            const selectedDate = document.getElementById("datePicker").value;
 
+            if (!selectedDate) {
+                alert("Select date first");
+                return;
+            }
+
+            if (clickMarker) {
+                map.removeLayer(clickMarker);
+            }
+
+            clickMarker = L.marker([lat, lon]).addTo(map)
+                .bindPopup("⏳ Loading...")
+                .openPopup();
         fetch(`/get_rainfall_value/?lat=${lat}&lon=${lon}&date=${selectedDate}`)
-            .then(res => res.json())
-            .then(data => {
-                let val = data.rainfall !== null
-                    ? data.rainfall.toFixed(2) + " mm"
-                    : "No data";
+        
+        .then(res => res.json())
+        .then(data => {
+            console.log("API:", data);
 
-                clickMarker.setPopupContent(
-                    `📍 ${lat.toFixed(3)}, ${lon.toFixed(3)}<br>🌧️ <b>${val}</b>`
-                );
-            })
-            .catch(() => {
-                clickMarker.setPopupContent("❌ Failed to fetch data");
-            });
-    });
+            if (data.error) {
+                clickMarker.setPopupContent("❌ " + data.error);
+                return;
+            }
 
-    // =========================
-    // LEGEND
-    // =========================
-    var legend = L.control({position: 'bottomright'});
-    legend.onAdd = function(map) {
-        var div = L.DomUtil.create('div', 'info legend');
-        div.style.background = 'white';
-        div.style.padding = '10px';
-        div.style.borderRadius = '5px';
-        div.style.boxShadow = '0 0 5px rgba(0,0,0,0.2)';
-        div.innerHTML = '<strong>Rainfall (mm)</strong><br>' +
-            '<span style="background:#ffffcc;">&nbsp;&nbsp;&nbsp;</span> 0-30<br>' +
-            '<span style="background:#a1dab4;">&nbsp;&nbsp;&nbsp;</span> 20-30<br>' +
-            '<span style="background:#41b6c4;">&nbsp;&nbsp;&nbsp;</span> 30-40<br>' +
-            '<span style="background:#2c7fb8;">&nbsp;&nbsp;&nbsp;</span> 40-50<br>' +
-            '<span style="background:#253494;">&nbsp;&nbsp;&nbsp;</span> 50-100';
-        return div;
-    };
-    legend.addTo(map);
+            let val = data.rainfall !== null
+                ? data.rainfall.toFixed(2) + " mm"
+                : "No data";
 
-    // =========================
-    // INFO PANEL
-    // =========================
-    var info = L.control({position: 'topright'});
-    info.onAdd = function(map) {
-        var div = L.DomUtil.create('div');
-        div.innerHTML = `<b>📅 {{ date }}</b><br>CHIRPS Daily Rainfall`;
-        div.style.background = 'white';
-        div.style.padding = '8px 12px';
-        div.style.borderRadius = '5px';
-        div.style.boxShadow = '0 0 5px rgba(0,0,0,0.2)';
-        return div;
-    };
-    info.addTo(map);
+            let dateRange = `${data.start_date} → ${data.end_date}`;
 
-</script>
+            clickMarker.setPopupContent(
+                `📍${lat.toFixed(3)}, ${lon.toFixed(3)}<br>
+                 🌧️ <b>Rainfall: ${val}</b><br>
+                 📅 Date: ${dateRange}`
+            );
+        });
+});
+
+        // =========================
+        // LEGEND
+        // =========================
+        var legend = L.control({ position: 'bottomright' });
+        legend.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'info legend');
+            div.style.background = 'white';
+            div.style.padding = '10px';
+            div.style.borderRadius = '5px';
+            div.style.boxShadow = '0 0 5px rgba(0,0,0,0.2)';
+            div.innerHTML = '<strong>Rainfall (mm)</strong><br>' +
+                '<span style="background:#ffffcc;">&nbsp;&nbsp;&nbsp;</span> 0-30<br>' +
+                '<span style="background:#a1dab4;">&nbsp;&nbsp;&nbsp;</span> 20-30<br>' +
+                '<span style="background:#41b6c4;">&nbsp;&nbsp;&nbsp;</span> 30-40<br>' +
+                '<span style="background:#2c7fb8;">&nbsp;&nbsp;&nbsp;</span> 40-50<br>' +
+                '<span style="background:#253494;">&nbsp;&nbsp;&nbsp;</span> 50-100';
+            return div;
+        };
+        legend.addTo(map);
+
+        // =========================
+        // INFO PANEL
+        // =========================
+        var info = L.control({ position: 'topright' });
+        info.onAdd = function (map) {
+            var div = L.DomUtil.create('div');
+            div.innerHTML = `<b>📅 {{ date }}</b><br>CHIRPS Daily Rainfall`;
+            div.style.background = 'white';
+            div.style.padding = '8px 12px';
+            div.style.borderRadius = '5px';
+            div.style.boxShadow = '0 0 5px rgba(0,0,0,0.2)';
+            return div;
+        };
+        info.addTo(map);
+
+    </script>
 </body>
-</html> 
+
+</html>
