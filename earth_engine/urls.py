@@ -31,6 +31,11 @@ urlpatterns = [
         name="get_rainfall_value_series_all",
     ),
     path(
+        "get_rainfall_value_series_district/",
+        views.get_rainfall_value_series_district,
+        name="get_rainfall_value_series_district",
+    ),
+    path(
         "test/",
         views.test,
         name="test",
