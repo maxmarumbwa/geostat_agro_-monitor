@@ -1,194 +1,195 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-    <title>CHIRPS Rainfall Raster - Zimbabwe</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <title>Rainfall Time Series</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            max-width: 800px;
         }
-
-        #map {
-            width: 90%;
-            height: 800px;
-            margin-top: 10px;
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #ddd;
         }
-
-        button {
-            margin-left: 5px;
+        th {
+            background-color: #f2f2f2;
+        }
+        .rainfall-positive {
+            font-weight: bold;
+            color: #0066cc;
+            background-color: #e6f2ff;
+        }
+        .rainfall-zero {
+            color: #999;
+        }
+        .stats {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        .success {
+            color: green;
         }
     </style>
 </head>
-
 <body>
 
-    <h1>🌧️ CHIRPS Daily Rainfall Raster - Zimbabwe: {{ date }}</h1>
+<h2>🌧️ Rainfall Time Series</h2>
 
-    <!-- DATE PICKER -->
-    <label for="datePicker"><b>Select Date:</b></label>
-    <input type="date" id="datePicker" value="{{ selected_date|default:'2021-12-20' }}">
-    <button onclick="loadDate()">Load</button>
+<label>Latitude:</label>
+<input type="number" id="lat" value="-20" step="any"><br><br>
 
-    <!-- QUERY BUTTON PART OF HTML -->
-    <button id="queryBtn" onclick="activateQuery()">🖱️ Query Rainfall</button>
+<label>Longitude:</label>
+<input type="number" id="lon" value="30" step="any"><br><br>
 
-    <!-- MAP -->
-    <div id="map"></div>
+<label>Start Date:</label>
+<input type="date" id="start_date" value="2023-12-20"><br><br>
 
-    <script>
-        // =========================
-        // DATE CONTROL
-        // =========================
-        function setMaxDate() {
-            const today = new Date();
-            today.setDate(today.getDate() - 30); // CHIRPS 30-day lag
-            document.getElementById("datePicker").max = today.toISOString().split('T')[0];
-        }
-        setMaxDate();
+<label>End Date:</label>
+<input type="date" id="end_date" value="2024-02-10"><br><br>
 
-        function loadDate() {
-            const selectedDate = document.getElementById("datePicker").value;
-            if (!selectedDate) {
-                alert("Please select a date");
-                return;
+<button onclick="loadData()">Load Rainfall Data</button>
+
+<h3>Results:</h3>
+<div id="errorMessage" style="color: red; margin: 10px 0;"></div>
+<div id="stats" class="stats"></div>
+<div id="apiInfo" style="margin: 10px 0; font-size: 0.9em; color: #666;"></div>
+
+<table border="1" id="resultsTable">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Rainfall (mm)</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<script>
+function loadData() {
+    const lat = document.getElementById("lat").value;
+    const lon = document.getElementById("lon").value;
+    const start_date = document.getElementById("start_date").value;
+    const end_date = document.getElementById("end_date").value;
+
+    // Clear previous results
+    document.getElementById("errorMessage").innerHTML = "";
+    document.getElementById("stats").innerHTML = "";
+    document.getElementById("apiInfo").innerHTML = "";
+    const tableBody = document.querySelector("#resultsTable tbody");
+    tableBody.innerHTML = "<tr><td colspan='2'>Loading...</td></tr>";
+
+    const url = `http://127.0.0.1:8000/get_rainfall_value_series_all/?lat=${lat}&lon=${lon}&start_date=${start_date}&end_date=${end_date}`;
+    
+    console.log("Fetching URL:", url);
+
+    fetch(url)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-
-            const today = new Date();
-            const selected = new Date(selectedDate);
-            const diffDays = (today - selected) / (1000 * 60 * 60 * 24);
-            if (diffDays < 30) {
-                alert("⚠️ CHIRPS data has a 30-day lag. Please select an older date.");
-                return;
-            }
-
-            window.location.href = "?date=" + selectedDate;
-        }
-
-        // =========================
-        // MAP INITIALIZATION
-        // =========================
-        var map = L.map('map').setView([-19.5, 29.0], 7);
-
-        // Base map
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-            attribution: '© CartoDB'
-        }).addTo(map);
-
-        // Load Zimbabwe administrative boundaries
-        fetch('/static/geojson/zimadm1.geojson')
-            .then(res => res.json())
-            .then(data => {
-                L.geoJSON(data, {
-                    style: { color: '#ff4444', weight: 2, fill: false }
-                }).addTo(map);
-            });
-
-        // CHIRPS Tile Layer
-        {% if error %}
-        document.write('<p style="color:red">Error: {{ error }}</p>');
-        {% else %}
-        L.tileLayer('{{ tile_url|safe }}', {
-            attribution: '© CHIRPS | Google Earth Engine',
-            opacity: 0.8,
-            maxZoom: 10
-        }).addTo(map);
-        {% endif %}
-
-        // =========================
-        // QUERY RAINFALL FUNCTIONALITY
-        // =========================
-        let queryMode = false;
-        let clickMarker = null;
-
-        function activateQuery() {
-            queryMode = !queryMode;
-            const btn = document.getElementById("queryBtn");
-
-            if (queryMode) {
-                btn.innerHTML = "✅ Click map";              // show active state
-                map.getContainer().style.cursor = "crosshair";
-            } else {
-                btn.innerHTML = "🖱️ Query Rainfall";        // revert button
-                map.getContainer().style.cursor = "";
-            }
-        }
-
-        // Map click to get rainfall
-        map.on('click', function (e) {
-            if (!queryMode) return;
-
-            const lat = e.latlng.lat;
-            const lon = e.latlng.lng;
-            const selectedDate = document.getElementById("datePicker").value;
-
-            if (!selectedDate) {
-                alert("Select date first");
-                return;
-            }
-
-            if (clickMarker) {
-                map.removeLayer(clickMarker);
-            }
-
-            clickMarker = L.marker([lat, lon]).addTo(map)
-                .bindPopup("⏳ Loading...")
-                .openPopup();
-
-            fetch(`/get_rainfall_value/?lat=${lat}&lon=${lon}&date=${selectedDate}`)
-                .then(res => res.json())
-                .then(data => {
-                    let val = data.rainfall !== null
-                        ? data.rainfall.toFixed(2) + " mm"
-                        : "No data";
-
-                    clickMarker.setPopupContent(
-                        `📍 ${lat.toFixed(3)}, ${lon.toFixed(3)}<br>🌧️ <b>${val}</b>`
-                    );
-                })
-                .catch(() => {
-                    clickMarker.setPopupContent("❌ Failed to fetch data");
+            return response.json();
+        })
+        .then(response => {
+            console.log("API Response:", response);
+            
+            // Check if response has status and data
+            if (response.status === "success" && response.data && Array.isArray(response.data)) {
+                const rainfallData = response.data;
+                const count = response.count;
+                
+                console.log(`Successfully loaded ${rainfallData.length} records`);
+                
+                // Display API info
+                document.getElementById("apiInfo").innerHTML = `
+                    <span class="success">✓ API Status: ${response.status}</span> | 
+                    Location: ${response.lat}, ${response.lon} | 
+                    Date Range: ${response.start_date} to ${response.end_date} | 
+                    Total Records: ${response.count}
+                `;
+                
+                // Clear loading message
+                tableBody.innerHTML = "";
+                
+                // Track statistics
+                let totalRainfall = 0;
+                let rainyDays = 0;
+                let maxRainfall = 0;
+                let maxRainfallDate = "";
+                
+                // Display each record
+                rainfallData.forEach(item => {
+                    const date = item.date;
+                    const rainfall = item.rainfall;
+                    
+                    // Format the rainfall value
+                    let displayValue = "";
+                    let rowClass = "";
+                    
+                    if (rainfall === 0) {
+                        displayValue = "0.00";
+                        rowClass = "rainfall-zero";
+                    } else if (rainfall > 0) {
+                        displayValue = rainfall.toFixed(2);
+                        rowClass = "rainfall-positive";
+                        totalRainfall += rainfall;
+                        rainyDays++;
+                        
+                        if (rainfall > maxRainfall) {
+                            maxRainfall = rainfall;
+                            maxRainfallDate = date;
+                        }
+                    } else {
+                        displayValue = rainfall.toString();
+                    }
+                    
+                    const row = `
+                        <tr class="${rowClass}">
+                            <td>${date}</td>
+                            <td>${displayValue}</td>
+                        </tr>
+                    `;
+                    tableBody.innerHTML += row;
                 });
+                
+                // Calculate statistics
+                const avgRainfall = rainyDays > 0 ? (totalRainfall / rainyDays).toFixed(2) : 0;
+                const totalDays = rainfallData.length;
+                const dryDays = totalDays - rainyDays;
+                const coveragePercent = ((rainyDays / totalDays) * 100).toFixed(1);
+                
+                const statsHtml = `
+                    <strong>📊 Rainfall Statistics (${response.start_date} to ${response.end_date}):</strong><br><br>
+                    <strong>📍 Location:</strong> ${response.lat}°, ${response.lon}°<br>
+                    <strong>📅 Total Days:</strong> ${totalDays}<br>
+                    <strong>☔ Rainy Days:</strong> ${rainyDays} (${coveragePercent}% of days)<br>
+                    <strong>☀️ Dry Days (0mm):</strong> ${dryDays}<br>
+                    <strong>💧 Total Rainfall:</strong> ${totalRainfall.toFixed(2)} mm<br>
+                    <strong>📊 Average Rainfall (rainy days only):</strong> ${avgRainfall} mm<br>
+                    <strong>🏆 Maximum Daily Rainfall:</strong> ${maxRainfall.toFixed(2)} mm on ${maxRainfallDate}<br>
+                    <strong>📈 Average Daily Rainfall (all days):</strong> ${(totalRainfall / totalDays).toFixed(2)} mm
+                `;
+                document.getElementById("stats").innerHTML = statsHtml;
+                
+            } else {
+                // Handle unexpected response format
+                console.error("Unexpected API response format:", response);
+                document.getElementById("errorMessage").innerHTML = "API returned unexpected format. Check console for details.";
+                tableBody.innerHTML = "<tr><td colspan='2'>Error: Invalid data format from API</td></tr>";
+            }
+        })
+        .catch(error => {
+            console.error("Error details:", error);
+            document.getElementById("errorMessage").innerHTML = `Failed to load data: ${error.message}<br>
+                Make sure the API server is running at http://127.0.0.1:8000`;
+            const tableBody = document.querySelector("#resultsTable tbody");
+            tableBody.innerHTML = "<tr><td colspan='2'>Error loading data</td></tr>";
         });
+}
+</script>
 
-        // =========================
-        // LEGEND
-        // =========================
-        var legend = L.control({ position: 'bottomright' });
-        legend.onAdd = function (map) {
-            var div = L.DomUtil.create('div', 'info legend');
-            div.style.background = 'white';
-            div.style.padding = '10px';
-            div.style.borderRadius = '5px';
-            div.style.boxShadow = '0 0 5px rgba(0,0,0,0.2)';
-            div.innerHTML = '<strong>Rainfall (mm)</strong><br>' +
-                '<span style="background:#ffffcc;">&nbsp;&nbsp;&nbsp;</span> 0-30<br>' +
-                '<span style="background:#a1dab4;">&nbsp;&nbsp;&nbsp;</span> 20-30<br>' +
-                '<span style="background:#41b6c4;">&nbsp;&nbsp;&nbsp;</span> 30-40<br>' +
-                '<span style="background:#2c7fb8;">&nbsp;&nbsp;&nbsp;</span> 40-50<br>' +
-                '<span style="background:#253494;">&nbsp;&nbsp;&nbsp;</span> 50-100';
-            return div;
-        };
-        legend.addTo(map);
-
-        // =========================
-        // INFO PANEL
-        // =========================
-        var info = L.control({ position: 'topright' });
-        info.onAdd = function (map) {
-            var div = L.DomUtil.create('div');
-            div.innerHTML = `<b>📅 {{ date }}</b><br>CHIRPS Daily Rainfall`;
-            div.style.background = 'white';
-            div.style.padding = '8px 12px';
-            div.style.borderRadius = '5px';
-            div.style.boxShadow = '0 0 5px rgba(0,0,0,0.2)';
-            return div;
-        };
-        info.addTo(map);
-
-    </script>
 </body>
-
 </html>

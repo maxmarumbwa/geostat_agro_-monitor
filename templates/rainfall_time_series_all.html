@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CHIRPS Rainfall - Zimbabwe</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- ✅ Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<h1>CHIRPS Daily Rainfall - Zimbabwe</h1>
+
+<form method="GET">
+    <label>Start Date:</label>
+    <input type="date" id="start_date" required>
+
+    <label>End Date:</label>
+    <input type="date" id="end_date" required>
+
+    <button type="submit">Update Map</button>
+</form>
+
+<button onclick="activateQuery()">Query Rainfall</button>
+
+<div id="map" style="height: 500px;"></div>
+
+<!-- ✅ CHART CONTAINER -->
+<canvas id="rainChart" height="120"></canvas>
+
+<script>
+    var map = L.map('map').setView([{{ center_lat }}, {{ center_lng }}], 6);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png').addTo(map);
+
+    L.tileLayer('{{ tile_url|safe }}', { opacity: 0.8 }).addTo(map);
+
+    var geojsonData = {{ geojson_data|safe }};
+    L.geoJSON(geojsonData).addTo(map);
+
+    let queryMode = false;
+    let marker = null;
+    let chart = null;
+
+    function activateQuery() {
+        queryMode = !queryMode;
+        map.getContainer().style.cursor = queryMode ? "crosshair" : "";
+    }
+
+    map.on('click', function (e) {
+        if (!queryMode) return;
+
+        const lat = e.latlng.lat;
+        const lon = e.latlng.lng;
+
+        const startDate = document.getElementById("start_date").value;
+        const endDate = document.getElementById("end_date").value;
+
+        if (!startDate || !endDate) {
+            alert("Select dates");
+            return;
+        }
+
+        if (marker) map.removeLayer(marker);
+
+        marker = L.marker([lat, lon]).addTo(map)
+            .bindPopup("Loading...")
+            .openPopup();
+
+        const url = `/get_rainfall_value_series_all/?lat=${lat}&lon=${lon}&start_date=${startDate}&end_date=${endDate}`;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+
+                if (data.status !== "success") {
+                    marker.setPopupContent("Error");
+                    return;
+                }
+
+                // ✅ Extract arrays
+                const dates = data.data.map(d => d.date);
+                const rainfall = data.data.map(d => d.rainfall || 0);
+
+                // ✅ Update popup (summary)
+                const total = rainfall.reduce((a, b) => a + b, 0).toFixed(2);
+
+                marker.setPopupContent(
+                    `<b>${lat.toFixed(3)}, ${lon.toFixed(3)}</b><br>
+                     Total Rainfall: ${total} mm<br>
+                     Days: ${data.count}`
+                );
+
+                // ✅ DRAW CHART
+                if (chart) chart.destroy();
+
+                const ctx = document.getElementById('rainChart').getContext('2d');
+
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: dates,
+                        datasets: [{
+                            label: 'Daily Rainfall (mm)',
+                            data: rainfall,
+                            borderWidth: 2,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            x: {
+                                title: { display: true, text: 'Date' }
+                            },
+                            y: {
+                                title: { display: true, text: 'Rainfall (mm)' }
+                            }
+                        }
+                    }
+                });
+
+            })
+            .catch(err => {
+                console.error(err);
+                marker.setPopupContent("Failed");
+            });
+    });
+
+</script>
+
+</body>
+</html>

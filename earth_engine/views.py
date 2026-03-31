@@ -1,5 +1,6 @@
 # Display cumm rainfall for a specific btn and date range
 import json
+from urllib import request
 import ee
 from django.shortcuts import render
 from django.conf import settings
@@ -194,6 +195,7 @@ def rainfall_cum_start_end_select(request):
         context = {"error": str(e)}
 
     return render(request, "rainfall_cum_start_end_select.html", context)
+    # return render(request, "rainfall_time_series_all.html", context)
 
 
 ##########################################################################
@@ -266,7 +268,7 @@ def get_rainfall_value_series(request):
             ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
             .filterDate(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
             .select("precipitation")
-            .mean()
+            .sum()
         )
 
         point = ee.Geometry.Point([lon, lat])
@@ -289,6 +291,118 @@ def get_rainfall_value_series(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)})
+
+
+################################################################################################
+#############           Get pixel info for multiple dates btwn 2 dates             ###########
+#################################################################################################
+
+from django.http import JsonResponse
+import ee
+from datetime import datetime
+
+
+def get_rainfall_value_series_all(request):
+    try:
+        # ---------------------------
+        # 1. Get query parameters
+        # ---------------------------
+        lat = request.GET.get("lat")
+        lon = request.GET.get("lon")
+        start_date_str = request.GET.get("start_date") or "2023-01-01"
+        end_date_str = request.GET.get("end_date") or "2023-01-04"
+
+        # Validate lat/lon
+        if lat is None or lon is None:
+            return JsonResponse({"error": "Missing lat/lon parameters"}, status=400)
+
+        lat = float(lat)
+        lon = float(lon)
+
+        # ---------------------------
+        # 2. Parse dates
+        # ---------------------------
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
+        except ValueError:
+            return JsonResponse(
+                {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
+            )
+
+        # Ensure start <= end
+        if start_date > end_date:
+            return JsonResponse(
+                {"error": "start_date must be before end_date"}, status=400
+            )
+
+        # ---------------------------
+        # 3. Limit date range (IMPORTANT)
+        # ---------------------------
+        max_days = 365  # prevent heavy requests
+        if (end_date - start_date).days > max_days:
+            return JsonResponse(
+                {"error": f"Date range too large. Max allowed is {max_days} days."},
+                status=400,
+            )
+
+        # ---------------------------
+        # 4. Load CHIRPS collection
+        # ---------------------------
+        collection = (
+            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate(start_date_str, end_date_str)
+            .select("precipitation")
+        )
+
+        point = ee.Geometry.Point([lon, lat])
+
+        # ---------------------------
+        # 5. Extract daily values
+        # ---------------------------
+        def extract_daily(image):
+            date = ee.Date(image.get("system:time_start")).format("YYYY-MM-dd")
+            rainfall = image.reduceRegion(
+                reducer=ee.Reducer.mean(), geometry=point, scale=5000, bestEffort=True
+            ).get("precipitation")
+
+            return ee.Feature(None, {"date": date, "rainfall": rainfall})
+
+        features = collection.map(extract_daily)
+
+        # ---------------------------
+        # 6. Convert to Python
+        # ---------------------------
+        feature_list = features.getInfo().get("features", [])
+
+        data = []
+        for f in feature_list:
+            props = f.get("properties", {})
+            data.append(
+                {"date": props.get("date"), "rainfall": props.get("rainfall") or 0}
+            )
+
+        # ---------------------------
+        # 7. Return response
+        # ---------------------------
+        return JsonResponse(
+            {
+                "status": "success",
+                "lat": lat,
+                "lon": lon,
+                "start_date": start_date_str,
+                "end_date": end_date_str,
+                "count": len(data),
+                "data": data,
+            }
+        )
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+def test(request):
+    return render(request, "test.html")
 
 
 #

@@ -102,6 +102,9 @@
             .openPopup();
 
         const url = `/get_rainfall_value_series/?lat=${lat}&lon=${lon}&start_date=${startDate}&end_date=${endDate}`;
+
+        console.log("Calling API:", url);
+
         fetch(url)
             .then(response => response.json())
             .then(data => {

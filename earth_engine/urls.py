@@ -25,4 +25,14 @@ urlpatterns = [
         views.get_rainfall_value_series,
         name="get_rainfall_value_series",
     ),
+    path(
+        "get_rainfall_value_series_all/",
+        views.get_rainfall_value_series_all,
+        name="get_rainfall_value_series_all",
+    ),
+    path(
+        "test/",
+        views.test,
+        name="test",
+    ),
 ]
