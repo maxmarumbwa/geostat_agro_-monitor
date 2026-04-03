@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NDVI Viewer - Zimbabwe</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        #map { height: 500px; margin-top: 20px; }
+        button { padding: 8px 12px; margin-left: 10px; }
+    </style>
+</head>
+<body>
+
+<h2>🌿 NDVI Viewer (Zimbabwe)</h2>
+
+<label>Select Date:</label>
+<input type="date" id="date" value="2024-01-01">
+
+<button onclick="loadNDVI()">Load NDVI</button>
+
+<p id="status"></p>
+
+<div id="map"></div>
+
+<script>
+
+// ---------------- GLOBALS ----------------
+let map;
+let ndviLayer = null;
+
+// Zimbabwe bounds
+const zimBounds = [
+    [-22.5, 25],
+    [-15, 34]
+];
+
+// ---------------- INIT MAP ----------------
+function initMap() {
+ 
+    map = L.map('map', {
+        maxBounds: zimBounds,
+        maxBoundsViscosity: 1.0,
+        minZoom: 6,
+        maxZoom: 10
+    }).fitBounds(zimBounds);
+
+    // Base map
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        noWrap: true
+    }).addTo(map);
+    
+}
+
+// ---------------- LOAD NDVI ----------------
+function loadNDVI() {
+
+    const date = document.getElementById("date").value;
+
+    if (!date) {
+        alert("Please select a date");
+        return;
+    }
+
+    document.getElementById("status").innerText = "Loading NDVI...";
+
+    fetch(`/get_ndvi_tile/?date=${date}`)
+        .then(res => res.json())
+        .then(data => {
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            // Remove old layer
+            if (ndviLayer) {
+                map.removeLayer(ndviLayer);
+            }
+
+            // Add NDVI layer
+            ndviLayer = L.tileLayer(data.tile_url, {
+                opacity: 0.7,
+                noWrap: true,
+                bounds: zimBounds
+            });
+
+            ndviLayer.addTo(map);
+
+            document.getElementById("status").innerText = "NDVI loaded for " + date;
+
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Error: " + err.message);
+        });
+}
+
+// INIT
+window.onload = initMap;
+
+
+</script>
+
+</body>
+</html>

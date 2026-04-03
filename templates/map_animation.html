@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rainfall Animation Dashboard</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        #map { height: 500px; margin-top: 20px; }
+        .controls { margin-top: 15px; }
+        input[type=range] { width: 300px; }
+    </style>
+</head>
+<body>
+
+<h2>🌧️ Rainfall Animation (CHIRPS - Zimbabwe)</h2>
+
+<label>Start Date:</label>
+<input type="date" id="start_date" value="2024-01-01">
+
+<label>End Date:</label>
+<input type="date" id="end_date" value="2024-01-10">
+
+<div class="controls">
+    <button onclick="startAnimation()">▶️ Play</button>
+    <button onclick="stopAnimation()">⏸ Pause</button>
+    <br><br>
+    <input type="range" id="slider" min="0" max="10" value="0" oninput="updateFromSlider()">
+    <span id="currentDate"></span>
+</div>
+
+<div id="map"></div>
+
+<script>
+
+let map;
+let rainfallLayer;
+let dates = [];
+let currentIndex = 0;
+let interval;
+
+// Zimbabwe bounds
+const zimBounds = [
+    [-22.5, 25],
+    [-15, 34]
+];
+
+// ---------------- INIT MAP ----------------
+function initMap() {
+
+    map = L.map('map', {
+        maxBounds: zimBounds,
+        maxBoundsViscosity: 1.0,
+        minZoom: 6,
+        maxZoom: 10
+    }).fitBounds(zimBounds);
+
+    // Base map
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        noWrap: true
+    }).addTo(map);
+}
+
+// ---------------- GENERATE DATE LIST ----------------
+function generateDates() {
+
+    const start = new Date(document.getElementById("start_date").value);
+    const end = new Date(document.getElementById("end_date").value);
+
+    dates = [];
+
+    let d = new Date(start);
+
+    while (d <= end) {
+        dates.push(d.toISOString().split('T')[0]);
+        d.setDate(d.getDate() + 1);
+    }
+
+    document.getElementById("slider").max = dates.length - 1;
+}
+
+// ---------------- LOAD RASTER ----------------
+function loadRainfall(date) {
+
+    document.getElementById("currentDate").innerText = date;
+
+    fetch(`/get_rainfall_tile/?date=${date}`)
+        .then(res => res.json())
+        .then(data => {
+
+            if (rainfallLayer) {
+                map.removeLayer(rainfallLayer);
+            }
+
+            rainfallLayer = L.tileLayer(data.tile_url, {
+                opacity: 0.6,
+                noWrap: true,
+                bounds: zimBounds   // 🚨 restrict to Zimbabwe
+            });
+
+            rainfallLayer.addTo(map);
+        })
+        .catch(err => console.error("Error loading rainfall:", err));
+}
+
+// ---------------- SLIDER ----------------
+function updateFromSlider() {
+    currentIndex = document.getElementById("slider").value;
+    loadRainfall(dates[currentIndex]);
+}
+
+// ---------------- PLAY ----------------
+function startAnimation() {
+
+    generateDates();
+    stopAnimation();
+
+    currentIndex = 0;
+
+    interval = setInterval(() => {
+
+        if (currentIndex >= dates.length) {
+            stopAnimation();
+            return;
+        }
+
+        document.getElementById("slider").value = currentIndex;
+
+        loadRainfall(dates[currentIndex]);
+
+        currentIndex++;
+
+    }, 800);
+}
+
+// ---------------- STOP ----------------
+function stopAnimation() {
+    clearInterval(interval);
+}
+
+// INIT
+window.onload = initMap;
+
+</script>
+
+</body>
+</html>

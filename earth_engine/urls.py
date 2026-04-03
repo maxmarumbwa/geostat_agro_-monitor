@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from django.views.generic import TemplateView  # Add this import
 
+
 urlpatterns = [
     path("rainfall_raster/", views.rainfall_raster, name="rainfall_raster"),
     path(
@@ -36,8 +37,49 @@ urlpatterns = [
         name="get_rainfall_value_series_district",
     ),
     path(
+        "district_graph_table/",
+        views.district_graph_table,
+        name="district_graph_table",
+    ),
+    path("get_rainfall_tile/", views.get_rainfall_tile, name="get_rainfall_tile"),
+    path(
         "test/",
         views.test,
         name="test",
+    ),
+    path(
+        "load_rainfall_map/",
+        views.load_rainfall_map,
+        name="load_rainfall_map",
+    ),
+    path("map_animation/", views.map_animation, name="map_animation"),
+    #
+    #
+    ################# NDVI endpoints ################
+    #
+    #
+    path("get_ndvi_tile/", views.get_ndvi_tile, name="get_ndvi_tile"),
+    path("load_ndvi_map/", views.load_ndvi_map, name="load_ndvi_map"),
+    path(
+        "load_ndvi_map_with_shp/",
+        views.load_ndvi_map_with_shp,
+        name="load_ndvi_map_with_shp",
+    ),
+    path(
+        "get_ndvi_anomaly_tile/",
+        views.get_ndvi_anomaly_tile,
+        name="get_ndvi_anomaly_tile",
+    ),
+    path(
+        "load_ndvi_ano_rain_map/",
+        views.load_ndvi_ano_rain_map,
+        name="load_ndvi_ano_rain_map",
+    ),
+    path("get_ndvi_value/", views.get_ndvi_value, name="get_ndvi_value"),
+    path("get_ndvi_timeseries/", views.get_ndvi_timeseries, name="get_ndvi_timeseries"),
+    path(
+        "get_ndvi_anomaly_timeseries/",
+        views.get_ndvi_anomaly_timeseries,
+        name="get_ndvi_anomaly_timeseries",
     ),
 ]

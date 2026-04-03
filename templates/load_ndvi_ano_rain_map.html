@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Zimbabwe Drought Monitoring Dashboard</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body { font-family: Arial; margin: 20px; }
+
+        #map { height: 500px; margin-top: 20px; }
+
+        .controls {
+            margin-top: 15px;
+        }
+
+        button {
+            margin-right: 10px;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<h2>🌍 Zimbabwe Drought Monitoring Dashboard</h2>
+
+<label>Date:</label>
+<input type="date" id="date" value="2024-01-01">
+
+<div class="controls">
+    <button onclick="loadRainfall()">🌧️ Rainfall</button>
+    <button onclick="loadNDVI()">🌿 NDVI</button>
+    <button onclick="loadNDVIAnomaly()">📉 NDVI Anomaly</button>
+</div>
+
+<p id="status"></p>
+
+<div id="map"></div>
+
+<script>
+
+// ---------------- GLOBALS ----------------
+let map;
+let currentLayer = null;
+
+// Zimbabwe bounds
+const zimBounds = [
+    [-22.5, 25],
+    [-15, 34]
+];
+
+// ---------------- INIT MAP ----------------
+function initMap() {
+
+    map = L.map('map', {
+        maxBounds: zimBounds,
+        maxBoundsViscosity: 1.0,
+        minZoom: 6,
+        maxZoom: 10
+    }).fitBounds(zimBounds);
+
+    // Base map
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        noWrap: true
+    }).addTo(map);
+}
+
+// ---------------- GENERIC LAYER LOADER ----------------
+function loadLayer(url, label) {
+
+    const date = document.getElementById("date").value;
+
+    if (!date) {
+        alert("Select a date");
+        return;
+    }
+
+    document.getElementById("status").innerText = "Loading " + label + "...";
+
+    fetch(`${url}?date=${date}`)
+        .then(res => res.json())
+        .then(data => {
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            // Remove existing layer
+            if (currentLayer) {
+                map.removeLayer(currentLayer);
+            }
+
+            // Add new layer
+            currentLayer = L.tileLayer(data.tile_url, {
+                opacity: 0.7,
+                noWrap: true,
+                bounds: zimBounds
+            });
+
+            currentLayer.addTo(map);
+
+            document.getElementById("status").innerText = label + " loaded (" + date + ")";
+
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Error: " + err.message);
+        });
+}
+
+// ---------------- SPECIFIC LOADERS ----------------
+function loadRainfall() {
+    loadLayer('/get_rainfall_tile/', "Rainfall");
+}
+
+function loadNDVI() {
+    loadLayer('/get_ndvi_tile/', "NDVI");
+}
+
+function loadNDVIAnomaly() {
+    loadLayer('/get_ndvi_anomaly_tile/', "NDVI Anomaly");
+}
+
+// INIT
+window.onload = initMap;
+
+</script>
+
+</body>
+</html>

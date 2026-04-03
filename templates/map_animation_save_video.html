@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rainfall Animation Dashboard</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- html2canvas for map capture -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <!-- GIF.js with workers (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js"></script>
+
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        #map { height: 500px; margin-top: 20px; }
+        .controls { margin-top: 15px; }
+        input[type=range] { width: 300px; }
+        .export-progress {
+            margin-top: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            padding: 4px;
+            font-size: 12px;
+            display: none;
+        }
+        .export-progress-bar {
+            background: #4caf50;
+            height: 8px;
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.2s;
+        }
+    </style>
+</head>
+<body>
+
+<h2>🌧️ Rainfall Animation (CHIRPS)</h2>
+
+<label>Start Date:</label>
+<input type="date" id="start_date" value="2024-01-01">
+
+<label>End Date:</label>
+<input type="date" id="end_date" value="2024-01-10">
+
+<div class="controls">
+    <button onclick="startAnimation()">▶️ Play</button>
+    <button onclick="stopAnimation()">⏸ Pause</button>
+    <br><br>
+    <input type="range" id="slider" min="0" max="10" value="0" oninput="updateFromSlider()">
+    <span id="currentDate"></span>
+    <br><br>
+    <button onclick="exportGIF()" id="exportBtn">🎬 Export GIF</button>
+    <div id="exportProgress" class="export-progress">
+        <div id="progressBar" class="export-progress-bar"></div>
+        <span id="progressText">0%</span>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script>
+let map;
+let rainfallLayer;
+let dates = [];
+let currentIndex = 0;
+let interval;
+
+// ---------------- INIT MAP ----------------
+function initMap() {
+    map = L.map('map').setView([-19, 29], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+}
+
+// ---------------- GENERATE DATE LIST ----------------
+function generateDates() {
+    const start = new Date(document.getElementById("start_date").value);
+    const end = new Date(document.getElementById("end_date").value);
+    dates = [];
+    let d = new Date(start);
+    while (d <= end) {
+        dates.push(d.toISOString().split('T')[0]);
+        d.setDate(d.getDate() + 1);
+    }
+    document.getElementById("slider").max = dates.length - 1;
+}
+
+// ---------------- LOAD RASTER ----------------
+function loadRainfall(date) {
+    document.getElementById("currentDate").innerText = date;
+    return fetch(`/get_rainfall_tile/?date=${date}`)
+        .then(res => res.json())
+        .then(data => {
+            if (rainfallLayer) {
+                map.removeLayer(rainfallLayer);
+            }
+            rainfallLayer = L.tileLayer(data.tile_url, { opacity: 0.6 });
+            rainfallLayer.addTo(map);
+        });
+}
+
+// Wait for all tiles to be loaded (simple but effective)
+function waitForTiles() {
+    return new Promise((resolve) => {
+        let tilesPending = false;
+        const checkTiles = () => {
+            const tiles = document.querySelectorAll('.leaflet-tile-loaded');
+            const allLoaded = tiles.length > 0 && 
+                Array.from(tiles).every(tile => tile.complete);
+            if (allLoaded || !tilesPending) {
+                resolve();
+            } else {
+                setTimeout(checkTiles, 200);
+            }
+        };
+        // Force a small delay to let tile requests start
+        setTimeout(checkTiles, 300);
+    });
+}
+
+// ---------------- SLIDER ----------------
+function updateFromSlider() {
+    currentIndex = document.getElementById("slider").value;
+    loadRainfall(dates[currentIndex]);
+}
+
+// ---------------- PLAY ----------------
+function startAnimation() {
+    generateDates();
+    stopAnimation();
+    interval = setInterval(() => {
+        if (currentIndex >= dates.length) {
+            stopAnimation();
+            return;
+        }
+        document.getElementById("slider").value = currentIndex;
+        loadRainfall(dates[currentIndex]);
+        currentIndex++;
+    }, 800);
+}
+
+// ---------------- STOP ----------------
+function stopAnimation() {
+    clearInterval(interval);
+}
+
+// ---------------- EXPORT GIF ----------------
+async function exportGIF() {
+    const exportBtn = document.getElementById('exportBtn');
+    const progressDiv = document.getElementById('exportProgress');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+
+    // Disable button and show progress
+    exportBtn.disabled = true;
+    progressDiv.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressText.innerText = '0%';
+
+    // Ensure dates are generated
+    generateDates();
+    if (dates.length === 0) {
+        alert('No dates in selected range.');
+        exportBtn.disabled = false;
+        progressDiv.style.display = 'none';
+        return;
+    }
+
+    // Create GIF encoder
+    const gif = new GIF({
+        workers: 2,
+        quality: 10,
+        width: 800,   // set desired width (will scale)
+        height: 500,
+        workerScript: 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js',
+        background: '#ffffff'
+    });
+
+    let framesProcessed = 0;
+    const totalFrames = dates.length;
+
+    for (let i = 0; i < totalFrames; i++) {
+        const date = dates[i];
+        // Load the raster for this date
+        await loadRainfall(date);
+        // Wait for tiles to load
+        await waitForTiles();
+
+        // Capture the map container as a canvas
+        const mapElement = document.getElementById('map');
+        const canvas = await html2canvas(mapElement, {
+            scale: 2,             // higher resolution
+            useCORS: true,        // allow cross-origin tiles
+            logging: false,
+            backgroundColor: '#ffffff'
+        });
+
+        // Add frame to GIF
+        gif.addFrame(canvas, { delay: 500 }); // 500ms delay between frames
+        framesProcessed++;
+        const percent = (framesProcessed / totalFrames) * 100;
+        progressBar.style.width = percent + '%';
+        progressText.innerText = Math.round(percent) + '%';
+    }
+
+    // When GIF is ready, download
+    gif.on('finished', (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'rainfall_animation.gif';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        exportBtn.disabled = false;
+        progressDiv.style.display = 'none';
+    });
+
+    gif.render();
+}
+
+// INIT
+window.onload = initMap;
+</script>
+
+</body>
+</html>

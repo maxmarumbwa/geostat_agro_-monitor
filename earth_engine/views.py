@@ -1,3 +1,339 @@
+#################################################################################################
+#
+######################################### Display NDVI   endpoints ####################################
+#
+################################################################################################
+#
+#
+from django.http import JsonResponse
+import ee
+
+
+def get_ndvi_tile(request):
+    try:
+        date = request.GET.get("date", "2025-02-01")
+
+        # -----------------------------
+        # 1. Zimbabwe boundary
+        # -----------------------------
+        zimbabwe = (
+            ee.FeatureCollection("FAO/GAUL/2015/level0")
+            .filter(ee.Filter.eq("ADM0_NAME", "Zimbabwe"))
+            .geometry()
+        )
+
+        # -----------------------------
+        # 2. MODIS NDVI (native 1km)
+        # -----------------------------
+        image = (
+            ee.ImageCollection("MODIS/061/MOD13A2")
+            .filterDate(date, ee.Date(date).advance(16, "day"))
+            .select("NDVI")
+            .mean()
+        )
+
+        # -----------------------------
+        # 3. Apply scale factor
+        # -----------------------------
+        image = image.multiply(0.0001)
+
+        # -----------------------------
+        # 4. Clip to Zimbabwe
+        # -----------------------------
+        # image = image.clip(zimbabwe)
+
+        # -----------------------------
+        # 5. Visualization
+        # -----------------------------
+        vis_params = {"min": 0, "max": 1, "palette": ["brown", "yellow", "green"]}
+
+        map_id = image.getMapId(vis_params)
+
+        return JsonResponse({"tile_url": map_id["tile_fetcher"].url_format})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+#############################################################################################
+############################  NDVI anomaly map #######################
+################################################################################################
+#
+
+from django.http import JsonResponse
+import ee
+
+
+def get_ndvi_anomaly_tile(request):
+    try:
+        date = request.GET.get("date", "2024-01-01")
+
+        # -----------------------------
+        # 1. Zimbabwe boundary
+        # -----------------------------
+        zimbabwe = (
+            ee.FeatureCollection("FAO/GAUL/2015/level0")
+            .filter(ee.Filter.eq("ADM0_NAME", "Zimbabwe"))
+            .geometry()
+        )
+
+        target_date = ee.Date(date)
+
+        # -----------------------------
+        # 2. CURRENT NDVI
+        # -----------------------------
+        current = (
+            ee.ImageCollection("MODIS/061/MOD13A2")
+            .filterDate(target_date, target_date.advance(16, "day"))
+            .select("NDVI")
+            .mean()
+            .multiply(0.0001)
+        )
+
+        # -----------------------------
+        # 3. BASELINE NDVI (multi-year)
+        # Example: 2001–2023 same period
+        # -----------------------------
+        baseline = (
+            ee.ImageCollection("MODIS/061/MOD13A2")
+            .filter(ee.Filter.calendarRange(2001, 2023, "year"))
+            .filter(
+                ee.Filter.dayOfYear(
+                    target_date.getRelative("day", "year"),
+                    target_date.getRelative("day", "year").add(16),
+                )
+            )
+            .select("NDVI")
+            .mean()
+            .multiply(0.0001)
+        )
+
+        # -----------------------------
+        # 4. ANOMALY
+        # -----------------------------
+        anomaly = current.subtract(baseline)
+
+        # -----------------------------
+        # 5. Clip to Zimbabwe
+        # -----------------------------
+        anomaly = anomaly.clip(zimbabwe)
+
+        # -----------------------------
+        # 6. Visualization
+        # -----------------------------
+        vis_params = {
+            "min": -0.5,
+            "max": 0.5,
+            "palette": [
+                "brown",  # negative anomaly (stress)
+                "yellow",
+                "green",  # positive anomaly
+            ],
+        }
+
+        map_id = anomaly.getMapId(vis_params)
+
+        return JsonResponse({"tile_url": map_id["tile_fetcher"].url_format})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+##########################################################
+############# get ndvi at clicke point
+#############################################################
+
+from django.http import JsonResponse
+import ee
+
+
+def get_ndvi_value(request):
+    try:
+        lat = float(request.GET.get("lat"))
+        lon = float(request.GET.get("lon"))
+        date = request.GET.get("date", "2024-01-01")
+
+        point = ee.Geometry.Point([lon, lat])
+
+        # NDVI image (same as before)
+        image = (
+            ee.ImageCollection("MODIS/061/MOD13A2")
+            .filterDate(date, ee.Date(date).advance(16, "day"))
+            .select("NDVI")
+            .mean()
+            .multiply(0.0001)
+        )
+
+        # Extract value
+        value = image.reduceRegion(
+            reducer=ee.Reducer.mean(), geometry=point, scale=1000
+        ).get("NDVI")
+
+        return JsonResponse({"ndvi": value.getInfo()})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+################################################################
+########### NDVI time series at point#############################
+####################################################################
+
+from django.http import JsonResponse
+import ee
+from datetime import datetime, timedelta
+
+
+def get_ndvi_timeseries(request):
+    try:
+        lat = float(request.GET.get("lat"))
+        lon = float(request.GET.get("lon"))
+        start_date = request.GET.get("start_date", "2024-01-01")
+        end_date = request.GET.get("end_date", "2024-03-01")
+
+        point = ee.Geometry.Point([lon, lat])
+
+        collection = (
+            ee.ImageCollection("MODIS/061/MOD13A2")
+            .filterDate(start_date, end_date)
+            .select("NDVI")
+        )
+
+        def extract_value(image):
+            value = image.reduceRegion(
+                reducer=ee.Reducer.mean(), geometry=point, scale=1000
+            ).get("NDVI")
+
+            return ee.Feature(
+                None, {"date": image.date().format("YYYY-MM-dd"), "ndvi": value}
+            )
+
+        features = collection.map(extract_value).getInfo()
+
+        data = [
+            {
+                "date": f["properties"]["date"],
+                "ndvi": (f["properties"]["ndvi"] or 0) * 0.0001,
+            }
+            for f in features["features"]
+        ]
+
+        return JsonResponse({"data": data})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+#
+#
+#
+########################### ndvi AnOMALY GRAPH  ##########################
+from django.http import JsonResponse
+import ee
+
+
+def get_ndvi_anomaly_timeseries(request):
+    try:
+        lat = float(request.GET.get("lat"))
+        lon = float(request.GET.get("lon"))
+        start_date = request.GET.get("start_date", "2024-01-01")
+        end_date = request.GET.get("end_date", "2024-03-01")
+
+        point = ee.Geometry.Point([lon, lat])
+
+        # ---------------- CURRENT NDVI ----------------
+        collection = (
+            ee.ImageCollection("MODIS/061/MOD13A2")
+            .filterDate(start_date, end_date)
+            .select("NDVI")
+        )
+
+        # ---------------- HISTORICAL ----------------
+        historical = (
+            ee.ImageCollection("MODIS/061/MOD13A2")
+            .filterDate("2001-01-01", "2023-12-31")
+            .select("NDVI")
+        )
+
+        # ---------------- FUNCTION ----------------
+        def extract_values(image):
+
+            date = image.date()
+            doy = date.getRelative("day", "year")
+
+            # ✅ STRICT 16-DAY MATCH (NO SMOOTHING)
+            seasonal = historical.filter(ee.Filter.dayOfYear(doy, doy.add(15)))
+
+            # ---------------- CLIMATOLOGY ----------------
+            baseline_img = seasonal.mean()
+            min_img = seasonal.min()
+            max_img = seasonal.max()
+
+            # ---------------- REDUCE ----------------
+            ndvi_val = image.reduceRegion(
+                reducer=ee.Reducer.mean(), geometry=point, scale=1000, bestEffort=True
+            ).get("NDVI")
+
+            baseline_val = baseline_img.reduceRegion(
+                reducer=ee.Reducer.mean(), geometry=point, scale=1000, bestEffort=True
+            ).get("NDVI")
+
+            min_val = min_img.reduceRegion(
+                reducer=ee.Reducer.mean(), geometry=point, scale=1000, bestEffort=True
+            ).get("NDVI")
+
+            max_val = max_img.reduceRegion(
+                reducer=ee.Reducer.mean(), geometry=point, scale=1000, bestEffort=True
+            ).get("NDVI")
+
+            # ---------------- ANOMALY ----------------
+            anomaly = ee.Number(ndvi_val).subtract(baseline_val)
+
+            return ee.Feature(
+                None,
+                {
+                    "date": date.format("YYYY-MM-dd"),
+                    "ndvi": ndvi_val,
+                    "baseline": baseline_val,
+                    "min": min_val,
+                    "max": max_val,
+                    "anomaly": anomaly,
+                },
+            )
+
+        features = collection.map(extract_values).getInfo()
+
+        # ---------------- FORMAT ----------------
+        data = []
+        for f in features["features"]:
+            p = f["properties"]
+
+            data.append(
+                {
+                    "date": p["date"],
+                    "ndvi": (p["ndvi"] or 0) * 0.0001,
+                    "baseline": (p["baseline"] or 0) * 0.0001,
+                    "min": (p["min"] or 0) * 0.0001,
+                    "max": (p["max"] or 0) * 0.0001,
+                    "anomaly": (p["anomaly"] or 0) * 0.0001,
+                }
+            )
+
+        return JsonResponse({"data": data})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+    #
+    #
+    #
+
+
+###############################################################################
+#
+#
+#
+#
+
 # Display cumm rainfall for a specific btn and date range
 import json
 from urllib import request
@@ -535,16 +871,178 @@ def get_rainfall_value_series_district(request):
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
+#########################################################################################
+#
+########################     Add rainfall map     ###################################
+#
+###########################################################################################
+# from django.http import JsonResponse
+# import ee
+
+
+# def get_rainfall_tile(request):
+#     try:
+#         date = request.GET.get("date", "2024-01-01")
+
+#         image = (
+#             ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+#             .filterDate(date, ee.Date(date).advance(1, "day"))
+#             .first()
+#             .select("precipitation")
+#         )
+
+#         vis_params = {
+#             "min": 0,
+#             "max": 50,
+#             "palette": ["white", "blue", "green", "yellow", "red"],
+#         }
+
+#         map_id = image.getMapId(vis_params)
+
+#         return JsonResponse({"tile_url": map_id["tile_fetcher"].url_format})
+
+#     except Exception as e:
+#         return JsonResponse({"error": str(e)}, status=500)
+
+
+#########################################################################################
+#
+########################     Add rainfall map  Limit to Zimbabwe   ###################################
+#
+###########################################################################################
+
+from django.http import JsonResponse
+import ee
+
+
+def get_rainfall_tile(request):
+    try:
+        date = request.GET.get("date", "2024-01-01")
+
+        # -----------------------------
+        # 1. Load Zimbabwe boundary
+        # -----------------------------
+        zimbabwe = (
+            ee.FeatureCollection("FAO/GAUL/2015/level0")
+            .filter(ee.Filter.eq("ADM0_NAME", "Zimbabwe"))
+            .geometry()
+        )
+
+        # -----------------------------
+        # 2. Get CHIRPS rainfall image
+        # -----------------------------
+        image = (
+            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate(date, ee.Date(date).advance(1, "day"))
+            .first()
+            .select("precipitation")
+        )
+
+        # -----------------------------
+        # 3. Clip to Zimbabwe
+        # -----------------------------
+        image = image.clip(zimbabwe)
+
+        # -----------------------------
+        # 4. Visualization parameters
+        # -----------------------------
+        vis_params = {
+            "min": 0,
+            "max": 50,
+            "palette": ["white", "blue", "green", "yellow", "red"],
+        }
+
+        map_id = image.getMapId(vis_params)
+
+        return JsonResponse({"tile_url": map_id["tile_fetcher"].url_format})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+#
+#
+##################################################################################
+#
+###################### Filtered rainfall map with threshold #######################
+#
+####################################################################################
+
+
+from django.http import JsonResponse
+import ee
+
+
+def get_rainfall_tile(request):
+    try:
+        date = request.GET.get("date", "2024-01-01")
+        threshold = request.GET.get("threshold")
+
+        threshold = float(threshold) if threshold else 0
+
+        # Load CHIRPS
+        image = (
+            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate(date, ee.Date(date).advance(1, "day"))
+            .first()
+            .select("precipitation")
+        )
+
+        # 🔥 APPLY FILTER (mask values below threshold)
+        filtered = image.updateMask(image.gte(threshold))
+
+        vis_params = {
+            "min": threshold,
+            "max": 50,
+            "palette": ["white", "blue", "green", "yellow", "red"],
+        }
+
+        map_id = filtered.getMapId(vis_params)
+
+        return JsonResponse({"tile_url": map_id["tile_fetcher"].url_format})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+#
+
+
+#
+
+
 #
 #
 #
-# #
+#
+
+
 def test(request):
     return render(request, "test.html")
 
 
-#
-##
-#
-#
+def district_graph_table(request):
+    return render(request, "Click polygon for time series graph and table.html")
+
+
+def load_rainfall_map(request):
+    return render(request, "load_rainfall_map_click_polygon.html")
+
+
+def map_animation(request):
+    return render(request, "map_animation.html")
+
+
+def load_ndvi_map_with_shp(request):
+    return render(request, "load_ndvi_map_with_shp.html")
+
+
+def load_ndvi_map(request):
+    return render(request, "load_ndvi_map.html")
+
+
+def load_ndvi_ano_rain_map(request):
+    return render(request, "load_ndvi_ano_rain_map.html")
+
+
 #
