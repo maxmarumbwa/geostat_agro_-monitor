@@ -21,10 +21,10 @@
             flex-direction: column;
         }
 
-        #map { flex: 1; }
+        #map { flex: 1; position: relative; }
 
         .chart-container {
-            margin-top: auto; /* push chart to bottom */
+            margin-top: auto;
             background: white;
             border-radius: 12px;
             padding: 10px;
@@ -80,6 +80,37 @@
         }
 
         .export-buttons { margin-top: 5px; display: flex; gap: 5px; }
+
+        /* CHART LEGEND */
+        #chart-legend div {
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
+        }
+
+        #chart-legend span {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 4px;
+        }
+
+        #chart-legend .baseline { border-top: 2px dashed blue; height: 0; background: none; }
+        #chart-legend { display:flex; justify-content:space-around; margin-bottom:5px; }
+
+        /* MAP LEGEND */
+        #map-legend {
+            position: absolute;
+            bottom: 30px;
+            left: 10px;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 0 6px rgba(0,0,0,0.3);
+            font-size: 12px;
+            line-height: 1.4;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
@@ -119,6 +150,13 @@
     <div id="infoText">Click a province</div>
 
     <div class="chart-container">
+        <!-- CHART LEGEND -->
+        <div id="chart-legend">
+            <div><span style="background:green;"></span>NDVI</div>
+            <div><span class="baseline"></span>Baseline</div>
+            <div><span style="background:red;"></span>Anomaly</div>
+        </div>
+
         <canvas id="chart"></canvas>
         <div class="export-buttons">
             <button onclick="exportCSV()">💾 Export CSV</button>
@@ -129,7 +167,9 @@
 
 </div>
 
-<div id="map"></div>
+<div id="map">
+    <div id="map-legend"></div>
+</div>
 
 </div>
 
@@ -137,7 +177,7 @@
 
 let map, layers = {}, activeLayer;
 let chart = null;
-let chartDataStore = null; // store latest chart data
+let chartDataStore = null;
 
 let mode = "polygon";
 let currentPoint = null;
@@ -217,6 +257,51 @@ function showLayer(name) {
 
     activeLayer = layers[name];
     activeLayer.addTo(map);
+
+    updateMapLegend(name);
+}
+
+// ---------------- MAP LEGEND ----------------
+function updateMapLegend(layerName) {
+
+    const legend = document.getElementById("map-legend");
+
+    if (!layerName || !layers[layerName]) {
+        legend.innerHTML = "";
+        return;
+    }
+
+    if(layerName === "NDVI") {
+        legend.innerHTML = `
+            <b>NDVI</b><br>
+            <i style="background:#d73027;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> -0.2<br>
+            <i style="background:#fc8d59;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.0<br>
+            <i style="background:#fee08b;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.2<br>
+            <i style="background:#d9ef8b;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.4<br>
+            <i style="background:#91cf60;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.6<br>
+            <i style="background:#1a9850;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.8+
+        `;
+    }
+    else if(layerName === "Baseline") {
+        legend.innerHTML = `
+            <b>Baseline NDVI</b><br>
+            <i style="background:#f7fbff;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0<br>
+            <i style="background:#c6dbef;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.2<br>
+            <i style="background:#6baed6;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.4<br>
+            <i style="background:#2171b5;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.6<br>
+            <i style="background:#084594;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.8+
+        `;
+    }
+    else if(layerName === "Anomaly") {
+        legend.innerHTML = `
+            <b>Anomaly</b><br>
+            <i style="background:#d73027;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> -0.5<br>
+            <i style="background:#fc8d59;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> -0.25<br>
+            <i style="background:#ffffbf;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0<br>
+            <i style="background:#91cf60;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.25<br>
+            <i style="background:#1a9850;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.5+
+        `;
+    }
 }
 
 // ---------------- GEOJSON ----------------
@@ -276,7 +361,7 @@ function loadPixelTimeSeries(lat, lon) {
         });
 }
 
-// ---------------- PROVINCE (WITH LOADING) ----------------
+// ---------------- PROVINCE ----------------
 function loadPolygonTimeSeries(geometry, name) {
 
     const start = document.getElementById("start_date").value;
@@ -332,7 +417,6 @@ function drawChart(labels, ndvi, baseline, anomaly) {
         }
     });
 
-    // store chart data for CSV export
     chartDataStore = {labels, ndvi, baseline, anomaly};
 }
 
