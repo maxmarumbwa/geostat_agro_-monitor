@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NDVI Dashboard - Zimbabwe Provinces</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #1e2a2e; }
+        .container { display: flex; height: 100vh; }
+        .sidebar {
+            width: 380px;
+            background: #f4f6f8;
+            padding: 1rem;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        #map { flex: 1; }
+        .chart-container { margin-top: 20px; background: white; border-radius: 12px; padding: 10px; }
+        canvas { max-height: 260px; width: 100%; }
+        button {
+            background: #2c7a47;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            margin: 5px 2px;
+        }
+        button:hover { background: #1e5a38; }
+        .status {
+            font-size: 0.8rem;
+            margin-top: 12px;
+            padding: 8px;
+            background: #e9ecef;
+            border-radius: 8px;
+        }
+        hr { margin: 15px 0; }
+        .coord-info { font-weight: bold; color: #1e6f5c; }
+        .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #ccc; border-top-color: #2c7a47; border-radius: 50%; animation: spin 0.6s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .info { font-size: 0.8rem; color: #2c3e50; margin-top: 8px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="sidebar">
+        <h3>🌿 NDVI Dashboard – Zimbabwe Provinces</h3>
+        <label>📅 Base Date (map layer):</label>
+        <input type="date" id="date" value="2024-01-01" style="width:100%; margin-bottom:8px;">
+        
+        <label>📊 Time Series Range:</label>
+        <input type="date" id="start_date" value="2024-01-01" style="width:100%;">
+        <input type="date" id="end_date" value="2024-06-01" style="width:100%; margin-top:4px;">
+        
+        <button id="reloadBtn">⟳ Refresh Map & Chart</button>
+        <hr>
+        <h4>🗺️ Layers</h4>
+        <button onclick="showLayer('NDVI')">🌱 NDVI</button>
+        <button onclick="showLayer('Baseline')">📊 Baseline</button>
+        <button onclick="showLayer('Anomaly')">⚠️ Anomaly</button>
+        
+        <div class="chart-container">
+            <h4>📈 Provincial Time Series</h4>
+            <div id="provinceName" class="coord-info">Click on a province</div>
+            <canvas id="timeChart"></canvas>
+            <div id="chartStatus" class="status">ℹ️ Click any province to load NDVI time series</div>
+        </div>
+        <div class="info">🗺️ Zimbabwe ADM1 boundaries – zonal mean NDVI</div>
+    </div>
+    <div id="map"></div>
+</div>
+
+<script>
+    let map, layers = {}, activeLayer = null;
+    let currentChart = null;
+    let currentGeoJSON = null;
+    const zimBounds = [[-22.5, 25], [-15.5, 34]];
+
+    // ---------- MAP INIT ----------
+    function initMap() {
+        map = L.map('map').fitBounds(zimBounds);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OSM'
+        }).addTo(map);
+
+        // Load NDVI layers
+        loadNDVILayers();
+
+        // Load GeoJSON (provinces)
+        loadProvinces();
+
+        // Reload button
+        document.getElementById('reloadBtn').addEventListener('click', () => {
+            loadNDVILayers();
+            if (currentGeoJSON && currentGeoJSON.getBounds) {
+                map.fitBounds(currentGeoJSON.getBounds());
+            }
+        });
+    }
+
+    // ---------- LOAD NDVI MAP LAYERS ----------
+    function loadNDVILayers() {
+        const date = document.getElementById('date').value;
+        fetch(`/get_ndvi_layers/?date=${date}`)
+            .then(res => res.json())
+            .then(data => {
+                layers = {
+                    "NDVI": L.tileLayer(data.ndvi),
+                    "Baseline": L.tileLayer(data.baseline),
+                    "Anomaly": L.tileLayer(data.anomaly)
+                };
+                showLayer('NDVI');
+            })
+            .catch(err => console.error("Layer error:", err));
+    }
+
+    function showLayer(name) {
+        if (!layers[name]) return;
+        if (activeLayer) map.removeLayer(activeLayer);
+        activeLayer = layers[name];
+        activeLayer.addTo(map);
+    }
+
+    // ---------- LOAD GEOJSON (PROVINCES) ----------
+    function loadProvinces() {
+        fetch('/static/geojson/zimadm2.geojson')
+            .then(response => response.json())
+            .then(data => {
+                currentGeoJSON = L.geoJSON(data, {
+                    style: {
+                        color: '#ffcc00',
+                        weight: 2,
+                        fillColor: '#ffffaa',
+                        fillOpacity: 0.3
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const provinceName = feature.properties.ADM2_EN;
+                        layer.bindTooltip(provinceName);
+                        layer.on('click', async () => {
+                            document.getElementById('provinceName').innerHTML = `📍 Province: ${provinceName}`;
+                            await loadPolygonTimeSeries(feature.geometry, provinceName);
+                        });
+                    }
+                }).addTo(map);
+                map.fitBounds(currentGeoJSON.getBounds());
+            })
+            .catch(err => {
+                console.error("GeoJSON load error:", err);
+                document.getElementById('chartStatus').innerHTML = "❌ Failed to load province boundaries.";
+            });
+    }
+
+    // ---------- TIME SERIES FOR POLYGON (province) ----------
+    async function loadPolygonTimeSeries(geometry, provinceName) {
+        const start = document.getElementById('start_date').value;
+        const end = document.getElementById('end_date').value;
+        const statusDiv = document.getElementById('chartStatus');
+        if (!start || !end) {
+            statusDiv.innerHTML = "⚠️ Please select start and end dates.";
+            return;
+        }
+        statusDiv.innerHTML = '<div class="loading"></div> Loading provincial NDVI...';
+        try {
+            // Send geometry as JSON to backend
+            const response = await fetch('/get_ndvi_zonal_timeseries/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    geometry: geometry,
+                    start_date: start,
+                    end_date: end,
+                    province: provinceName
+                })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const result = await response.json();
+            if (result.error) throw new Error(result.error);
+            const data = result.data;
+            if (!data || data.length === 0) {
+                statusDiv.innerHTML = "❌ No data available for this province and date range.";
+                return;
+            }
+            const dates = data.map(d => d.date);
+            const ndvi = data.map(d => d.ndvi);
+            const baseline = data.map(d => d.baseline);
+            const anomaly = data.map(d => d.anomaly);
+            drawChart(dates, ndvi, baseline, anomaly, provinceName);
+            statusDiv.innerHTML = `✅ ${provinceName}: ${data.length} observations. Anomaly = NDVI - Baseline`;
+        } catch (err) {
+            console.error(err);
+            statusDiv.innerHTML = `❌ Error: ${err.message}. Ensure backend is running.`;
+        }
+    }
+
+    // ---------- DRAW CHART ----------
+    function drawChart(labels, ndvi, baseline, anomaly, title) {
+        const ctx = document.getElementById('timeChart').getContext('2d');
+        if (currentChart) currentChart.destroy();
+        currentChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'NDVI (observed)',
+                        data: ndvi,
+                        borderColor: '#2c7a47',
+                        backgroundColor: 'rgba(44,122,71,0.05)',
+                        borderWidth: 2,
+                        tension: 0.2,
+                        fill: false,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Baseline (climatology)',
+                        data: baseline,
+                        borderColor: '#1e88e5',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        tension: 0.2,
+                        fill: false,
+                        pointRadius: 2
+                    },
+                    {
+                        label: 'Anomaly',
+                        data: anomaly,
+                        borderColor: '#e53935',
+                        backgroundColor: 'rgba(229,57,53,0.1)',
+                        borderWidth: 1.5,
+                        tension: 0.2,
+                        fill: true,
+                        yAxisID: 'y1',
+                        pointRadius: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    tooltip: { mode: 'index', intersect: false },
+                    legend: { position: 'top' }
+                },
+                scales: {
+                    y: { title: { display: true, text: 'NDVI / Baseline', color: '#2c7a47' }, min: -0.2, max: 1.0 },
+                    y1: { position: 'right', title: { display: true, text: 'Anomaly', color: '#e53935' }, min: -0.5, max: 0.5, grid: { drawOnChartArea: false } }
+                }
+            }
+        });
+    }
+
+    window.onload = initMap;
+</script>
+</body>
+</html>

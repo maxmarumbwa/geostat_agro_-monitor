@@ -92,4 +92,9 @@ urlpatterns = [
         "load_ndvi_raster_sub_products_min_max_avg_anom/",
         views.load_ndvi_raster_sub_products_min_max_avg_anom,
     ),
+    path(
+        "get_ndvi_zonal_timeseries/",
+        views.get_ndvi_zonal_timeseries,
+        name="get_ndvi_zonal_timeseries",
+    ),
 ]

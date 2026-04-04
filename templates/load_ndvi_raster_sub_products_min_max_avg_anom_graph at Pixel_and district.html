@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NDVI Dashboard - Zimbabwe</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Arial; background: #1e2a2e; }
+        .container { display: flex; height: 100vh; }
+
+        .sidebar {
+            width: 380px;
+            background: #f4f6f8;
+            padding: 1rem;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+
+        #map { flex: 1; }
+
+        .chart-container {
+            margin-top: 20px;
+            background: white;
+            border-radius: 12px;
+            padding: 10px;
+        }
+
+        canvas { max-height: 260px; width: 100%; }
+
+        button {
+            background: #2c7a47;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            margin: 5px 2px;
+        }
+
+        .mode-toggle { display: flex; gap: 10px; }
+
+        .mode-btn {
+            background: #6c757d;
+            flex: 1;
+        }
+
+        .mode-btn.active {
+            background: #2c7a47;
+        }
+
+        .status {
+            font-size: 0.8rem;
+            margin-top: 10px;
+            padding: 8px;
+            background: #e9ecef;
+            border-radius: 8px;
+        }
+
+        hr { margin: 15px 0; }
+
+        /* 🔥 Spinner */
+        .loading-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #ccc;
+            border-top-color: #2c7a47;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 6px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+<div class="sidebar">
+
+    <h3>🌿 NDVI Dashboard</h3>
+
+    <label>📅 Map Date:</label>
+    <input type="date" id="date" value="2024-01-01" style="width:100%;">
+
+    <hr>
+
+    <label>📊 Time Series:</label>
+    <input type="date" id="start_date" value="2024-01-01" style="width:100%;">
+    <input type="date" id="end_date" value="2024-06-01" style="width:100%; margin-top:5px;">
+
+    <button id="reloadBtn">⟳ Refresh</button>
+
+    <hr>
+
+    <h4>🗺️ Layers</h4>
+    <button onclick="showLayer('NDVI')">NDVI</button>
+    <button onclick="showLayer('Baseline')">Baseline</button>
+    <button onclick="showLayer('Anomaly')">Anomaly</button>
+
+    <hr>
+
+    <h4>🔄 Mode</h4>
+    <div class="mode-toggle">
+        <button id="pixelBtn" class="mode-btn">📍 Pixel</button>
+        <button id="polyBtn" class="mode-btn active">🗺 Province</button>
+    </div>
+
+    <div id="infoText">Click a province</div>
+
+    <div class="chart-container">
+        <canvas id="chart"></canvas>
+        <div id="status" class="status">Ready</div>
+    </div>
+
+</div>
+
+<div id="map"></div>
+
+</div>
+
+<script>
+
+let map, layers = {}, activeLayer;
+let chart = null;
+
+let mode = "polygon";
+let currentPoint = null;
+let currentProvince = null;
+let geoLayer = null;
+
+// ---------------- INIT ----------------
+function initMap() {
+
+    map = L.map('map').setView([-19, 29], 6);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    loadLayers();
+    loadGeoJSON();
+
+    document.getElementById("reloadBtn").onclick = reloadAll;
+
+    document.getElementById("pixelBtn").onclick = () => setMode("pixel");
+    document.getElementById("polyBtn").onclick = () => setMode("polygon");
+
+    map.on('click', function(e) {
+
+        if (mode !== "pixel") return;
+
+        const lat = e.latlng.lat;
+        const lon = e.latlng.lng;
+
+        currentPoint = {lat, lon};
+
+        document.getElementById("infoText").innerText =
+            `📍 Pixel: ${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+
+        loadPixelTimeSeries(lat, lon);
+    });
+}
+
+// ---------------- MODE ----------------
+function setMode(m) {
+
+    mode = m;
+
+    document.getElementById("pixelBtn").classList.toggle("active", m==="pixel");
+    document.getElementById("polyBtn").classList.toggle("active", m==="polygon");
+
+    if (m === "pixel") {
+        document.getElementById("infoText").innerText = "Click map";
+    } else {
+        document.getElementById("infoText").innerText = "Click a province";
+    }
+
+    if (chart) chart.destroy();
+}
+
+// ---------------- LOAD LAYERS ----------------
+function loadLayers() {
+
+    const date = document.getElementById("date").value;
+
+    fetch(`/get_ndvi_layers/?date=${date}`)
+        .then(res => res.json())
+        .then(data => {
+
+            layers = {
+                "NDVI": L.tileLayer(data.ndvi),
+                "Baseline": L.tileLayer(data.baseline),
+                "Anomaly": L.tileLayer(data.anomaly)
+            };
+
+            showLayer("NDVI");
+        });
+}
+
+function showLayer(name) {
+
+    if (activeLayer) map.removeLayer(activeLayer);
+
+    activeLayer = layers[name];
+    activeLayer.addTo(map);
+}
+
+// ---------------- GEOJSON ----------------
+function loadGeoJSON() {
+
+    fetch('/static/geojson/zimadm2.geojson')
+        .then(res => res.json())
+        .then(data => {
+
+            geoLayer = L.geoJSON(data, {
+                style: { color: 'yellow', weight: 2 },
+
+                onEachFeature: function(feature, layer) {
+
+                    const name = feature.properties.ADM2_EN;
+
+                    layer.bindTooltip(name);
+
+                    layer.on('click', () => {
+
+                        if (mode !== "polygon") return;
+
+                        currentProvince = name;
+
+                        document.getElementById("infoText").innerText = `🗺 ${name}`;
+
+                        loadPolygonTimeSeries(feature.geometry, name);
+                    });
+                }
+            }).addTo(map);
+        });
+}
+
+// ---------------- PIXEL ----------------
+function loadPixelTimeSeries(lat, lon) {
+
+    const start = document.getElementById("start_date").value;
+    const end = document.getElementById("end_date").value;
+
+    const status = document.getElementById("status");
+
+    status.innerHTML = `<span class="loading-spinner"></span> Loading pixel...`;
+
+    fetch(`/get_ndvi_anomaly_timeseries/?lat=${lat}&lon=${lon}&start_date=${start}&end_date=${end}`)
+        .then(res => res.json())
+        .then(data => {
+
+            const dates = data.data.map(d => d.date);
+
+            const ndvi = data.data.map(d => d.ndvi ?? 0);
+            const baseline = data.data.map(d => d.baseline ?? 0);
+            const anomaly = data.data.map(d => d.anomaly ?? 0);
+
+            drawChart(dates, ndvi, baseline, anomaly);
+
+            status.innerHTML = `✅ Pixel loaded (${dates.length} points)`;
+        });
+}
+
+// ---------------- PROVINCE (WITH LOADING) ----------------
+function loadPolygonTimeSeries(geometry, name) {
+
+    const start = document.getElementById("start_date").value;
+    const end = document.getElementById("end_date").value;
+
+    const status = document.getElementById("status");
+
+    // 🔥 LOADING MESSAGE
+    status.innerHTML = `<span class="loading-spinner"></span> Loading ${name}...`;
+
+    fetch('/get_ndvi_zonal_timeseries/', {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({geometry, start_date:start, end_date:end})
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        if (data.error) throw new Error(data.error);
+
+        const dates = data.data.map(d => d.date);
+
+        const ndvi = data.data.map(d => d.ndvi ?? 0);
+        const baseline = data.data.map(d => d.baseline ?? 0);
+        const anomaly = data.data.map(d => d.anomaly ?? 0);
+
+        drawChart(dates, ndvi, baseline, anomaly);
+
+        // ✅ SUCCESS MESSAGE
+        status.innerHTML = `✅ ${name} loaded (${dates.length} records)`;
+
+    })
+    .catch(err => {
+        console.error(err);
+        status.innerHTML = `❌ Error loading ${name}`;
+    });
+}
+
+// ---------------- CHART ----------------
+function drawChart(labels, ndvi, baseline, anomaly) {
+
+    const ctx = document.getElementById("chart").getContext("2d");
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                { label: 'NDVI', data: ndvi, borderColor: 'green', tension:0.3 },
+                { label: 'Baseline', data: baseline, borderColor: 'blue', borderDash:[5,5] },
+                { label: 'Anomaly', data: anomaly, borderColor: 'red', tension:0.3 }
+            ]
+        }
+    });
+}
+
+// ---------------- RELOAD ----------------
+function reloadAll() {
+
+    loadLayers();
+
+    if (mode === "pixel" && currentPoint) {
+        loadPixelTimeSeries(currentPoint.lat, currentPoint.lon);
+    }
+
+    if (mode === "polygon" && currentProvince) {
+        // optional reload
+    }
+}
+
+// INIT
+window.onload = initMap;
+
+</script>
+
+</body>
+</html>

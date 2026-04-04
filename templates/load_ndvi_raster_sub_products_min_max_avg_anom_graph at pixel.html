@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NDVI Dashboard - Zimbabwe Time Series</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #1e2a2e; }
+        .container { display: flex; height: 100vh; }
+        .sidebar {
+            width: 360px;
+            background: #f4f6f8;
+            padding: 1rem;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        #map { flex: 1; }
+        .chart-container { margin-top: 20px; background: white; border-radius: 12px; padding: 10px; }
+        canvas { max-height: 260px; width: 100%; }
+        button {
+            background: #2c7a47;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            margin: 5px 2px;
+        }
+        button:hover { background: #1e5a38; }
+        .status {
+            font-size: 0.8rem;
+            margin-top: 12px;
+            padding: 8px;
+            background: #e9ecef;
+            border-radius: 8px;
+        }
+        hr { margin: 15px 0; }
+        .coord-info { font-weight: bold; color: #1e6f5c; }
+        .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #ccc; border-top-color: #2c7a47; border-radius: 50%; animation: spin 0.6s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="sidebar">
+        <h3>🌿 NDVI Dashboard – Zimbabwe</h3>
+        <label>📅 Base Date (map layer):</label>
+        <input type="date" id="date" value="2024-01-01" style="width:100%; margin-bottom:8px;">
+        
+        <label>📊 Time Series Range:</label>
+        <input type="date" id="start_date" value="2024-01-01" style="width:100%;">
+        <input type="date" id="end_date" value="2024-06-01" style="width:100%; margin-top:4px;">
+        
+        <button id="reloadBtn">⟳ Refresh Map & Chart</button>
+        <hr>
+        <h4>🗺️ Layers</h4>
+        <button onclick="showLayer('NDVI')">🌱 NDVI</button>
+        <button onclick="showLayer('Baseline')">📊 Baseline</button>
+        <button onclick="showLayer('Anomaly')">⚠️ Anomaly</button>
+        
+        <div class="chart-container">
+            <h4>📈 Time Series at Clicked Point</h4>
+            <div id="clickCoord" class="coord-info">No point selected – click on map</div>
+            <canvas id="timeChart"></canvas>
+            <div id="chartStatus" class="status">ℹ️ Click on the map to load time series</div>
+        </div>
+    </div>
+    <div id="map"></div>
+</div>
+
+<script>
+    let map, layers = {}, activeLayer = null;
+    let currentChart = null;
+    let currentMarker = null;
+    let currentPoint = null;
+    const zimBounds = [[-22.5, 25], [-15.5, 34]];
+
+    // ---------- MAP INIT ----------
+    function initMap() {
+        map = L.map('map').fitBounds(zimBounds);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OSM'
+        }).addTo(map);
+
+        // Load default NDVI layer
+        loadNDVILayers();
+
+        // Map click -> load time series
+        map.on('click', async (e) => {
+            const { lat, lng } = e.latlng;
+            currentPoint = { lat, lng };
+            document.getElementById('clickCoord').innerHTML = `📍 Point: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            if (currentMarker) map.removeLayer(currentMarker);
+            currentMarker = L.marker([lat, lng]).addTo(map);
+            await loadTimeSeries(lat, lng);
+        });
+
+        // Reload button
+        document.getElementById('reloadBtn').addEventListener('click', () => {
+            loadNDVILayers();
+            if (currentPoint) loadTimeSeries(currentPoint.lat, currentPoint.lng);
+        });
+
+        // Auto reload on date range change
+        document.getElementById('start_date').addEventListener('change', () => {
+            if (currentPoint) loadTimeSeries(currentPoint.lat, currentPoint.lng);
+        });
+        document.getElementById('end_date').addEventListener('change', () => {
+            if (currentPoint) loadTimeSeries(currentPoint.lat, currentPoint.lng);
+        });
+    }
+
+    // ---------- LOAD MAP LAYERS (same as before) ----------
+    function loadNDVILayers() {
+        const date = document.getElementById('date').value;
+        fetch(`/get_ndvi_layers/?date=${date}`)
+            .then(res => res.json())
+            .then(data => {
+                layers = {
+                    "NDVI": L.tileLayer(data.ndvi),
+                    "Baseline": L.tileLayer(data.baseline),
+                    "Anomaly": L.tileLayer(data.anomaly)
+                };
+                showLayer('NDVI');
+            })
+            .catch(err => console.error("Layer error:", err));
+    }
+
+    function showLayer(name) {
+        if (!layers[name]) return;
+        if (activeLayer) map.removeLayer(activeLayer);
+        activeLayer = layers[name];
+        activeLayer.addTo(map);
+    }
+
+    // ---------- TIME SERIES (improved) ----------
+    async function loadTimeSeries(lat, lon) {
+        const start = document.getElementById('start_date').value;
+        const end = document.getElementById('end_date').value;
+        const statusDiv = document.getElementById('chartStatus');
+
+        if (!start || !end) {
+            statusDiv.innerHTML = "⚠️ Please select start and end dates.";
+            return;
+        }
+
+        statusDiv.innerHTML = '<div class="loading"></div> Loading time series...';
+        
+        try {
+            const response = await fetch(`/get_ndvi_anomaly_timeseries/?lat=${lat}&lon=${lon}&start_date=${start}&end_date=${end}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const result = await response.json();
+            if (result.error) throw new Error(result.error);
+            
+            const data = result.data;
+            if (!data || data.length === 0) {
+                statusDiv.innerHTML = "❌ No data available for this point and date range.";
+                return;
+            }
+
+            const dates = data.map(d => d.date);
+            const ndvi = data.map(d => d.ndvi);
+            const baseline = data.map(d => d.baseline);
+            const anomaly = data.map(d => d.anomaly);
+            
+            drawChart(dates, ndvi, baseline, anomaly);
+            statusDiv.innerHTML = `✅ Loaded ${data.length} observations. Anomaly = NDVI - Baseline`;
+        } catch (err) {
+            console.error(err);
+            statusDiv.innerHTML = `❌ Error: ${err.message}. Make sure backend is running.`;
+        }
+    }
+
+    // ---------- CHART DRAWING (enhanced) ----------
+    function drawChart(labels, ndvi, baseline, anomaly) {
+        const ctx = document.getElementById('timeChart').getContext('2d');
+        if (currentChart) currentChart.destroy();
+        
+        currentChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'NDVI (observed)',
+                        data: ndvi,
+                        borderColor: '#2c7a47',
+                        backgroundColor: 'rgba(44,122,71,0.05)',
+                        borderWidth: 2,
+                        tension: 0.2,
+                        fill: false,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    },
+                    {
+                        label: 'Baseline (climatology)',
+                        data: baseline,
+                        borderColor: '#1e88e5',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        tension: 0.2,
+                        fill: false,
+                        pointRadius: 2
+                    },
+                    {
+                        label: 'Anomaly',
+                        data: anomaly,
+                        borderColor: '#e53935',
+                        backgroundColor: 'rgba(229,57,53,0.1)',
+                        borderWidth: 1.5,
+                        tension: 0.2,
+                        fill: true,
+                        yAxisID: 'y1',
+                        pointRadius: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    tooltip: { mode: 'index', intersect: false },
+                    legend: { position: 'top' }
+                },
+                scales: {
+                    y: {
+                        title: { display: true, text: 'NDVI / Baseline', color: '#2c7a47' },
+                        min: -0.2,
+                        max: 1.0,
+                        grid: { color: '#ddd' }
+                    },
+                    y1: {
+                        position: 'right',
+                        title: { display: true, text: 'Anomaly', color: '#e53935' },
+                        min: -0.5,
+                        max: 0.5,
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+    }
+
+    // Start everything
+    window.onload = initMap;
+</script>
+</body>
+</html>
