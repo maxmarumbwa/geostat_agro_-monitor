@@ -8,29 +8,36 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
-        body { margin: 0; font-family: Arial; }
+        body {
+            margin: 0;
+            font-family: Arial;
+        }
 
+        /* ---------------- LAYOUT ---------------- */
         .container {
             display: flex;
             height: 100vh;
         }
 
-        /* SIDEBAR */
+        /* ---------------- SIDEBAR ---------------- */
         .sidebar {
             width: 330px;
             background: #f4f4f4;
             padding: 15px;
-            overflow-y: auto;
             box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .sidebar h3 {
+            margin-top: 0;
         }
 
         .sidebar button {
             width: 100%;
             padding: 10px;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
             border: none;
             background: #ddd;
-            cursor: pointer;
             border-radius: 5px;
         }
 
@@ -38,36 +45,14 @@
             background: #bbb;
         }
 
+        /* ---------------- MAP ---------------- */
         #map {
             flex: 1;
         }
 
-        /* LEGEND */
-        .legend {
-            margin-top: 15px;
-            padding: 10px;
-            background: white;
-            border-radius: 5px;
-            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        input, button {
+            font-size: 14px;
         }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 5px;
-        }
-
-        .color-box {
-            width: 20px;
-            height: 20px;
-            margin-right: 8px;
-        }
-
-        /* SLIDER */
-        .slider-container {
-            margin-top: 15px;
-        }
-
     </style>
 </head>
 <body>
@@ -76,8 +61,7 @@
 
     <!-- SIDEBAR -->
     <div class="sidebar">
-
-        <h3>🌿 NDVI Dashboard</h3>
+        <h3>🌿 NDVI Layers</h3>
 
         <label>Date:</label>
         <input type="date" id="date" value="2024-01-01">
@@ -86,27 +70,15 @@
 
         <hr>
 
-        <h4>Layers</h4>
+        <h4>Toggle Layers</h4>
+
         <button onclick="showLayer('NDVI')">NDVI</button>
         <button onclick="showLayer('Baseline')">Baseline</button>
         <button onclick="showLayer('Min NDVI')">Min NDVI</button>
         <button onclick="showLayer('Max NDVI')">Max NDVI</button>
         <button onclick="showLayer('Anomaly')">Anomaly</button>
 
-        <!-- OPACITY -->
-        <div class="slider-container">
-            <label>Opacity:</label>
-            <input type="range" min="0" max="1" step="0.1" value="0.7" oninput="changeOpacity(this.value)">
-        </div>
-
-        <!-- LEGEND -->
-        <div class="legend" id="legend">
-            <h4>Legend</h4>
-            <div id="legendContent"></div>
-        </div>
-
         <p id="status"></p>
-
     </div>
 
     <!-- MAP -->
@@ -120,10 +92,14 @@ let map;
 let layers = {};
 let activeLayer = null;
 
-const zimBounds = [[-22.5, 25], [-15, 34]];
+const zimBounds = [
+    [-22.5, 25],
+    [-15, 34]
+];
 
 // ---------------- INIT MAP ----------------
 function initMap() {
+
     map = L.map('map', {
         maxBounds: zimBounds,
         maxBoundsViscosity: 1.0
@@ -147,10 +123,12 @@ function loadNDVILayers() {
 
             if (data.error) throw new Error(data.error);
 
+            // Remove old layers
             Object.values(layers).forEach(l => {
                 if (map.hasLayer(l)) map.removeLayer(l);
             });
 
+            // Create layers
             layers = {
                 "NDVI": L.tileLayer(data.ndvi, { opacity: 0.7, bounds: zimBounds }),
                 "Baseline": L.tileLayer(data.baseline, { opacity: 0.7, bounds: zimBounds }),
@@ -159,13 +137,19 @@ function loadNDVILayers() {
                 "Anomaly": L.tileLayer(data.anomaly, { opacity: 0.7, bounds: zimBounds })
             };
 
+            // Default layer
             showLayer("NDVI");
 
             document.getElementById("status").innerText = "Layers loaded";
+
+        })
+        .catch(err => {
+            console.error(err);
+            alert(err.message);
         });
 }
 
-// ---------------- SHOW LAYER ----------------
+// ---------------- SHOW SELECTED LAYER ----------------
 function showLayer(name) {
 
     if (!layers[name]) {
@@ -173,44 +157,16 @@ function showLayer(name) {
         return;
     }
 
-    if (activeLayer) map.removeLayer(activeLayer);
+    // Remove current
+    if (activeLayer) {
+        map.removeLayer(activeLayer);
+    }
 
+    // Add new
     activeLayer = layers[name];
     activeLayer.addTo(map);
 
-    updateLegend(name);
-
     document.getElementById("status").innerText = "Showing: " + name;
-}
-
-// ---------------- OPACITY ----------------
-function changeOpacity(value) {
-    if (activeLayer) {
-        activeLayer.setOpacity(value);
-    }
-}
-
-// ---------------- LEGEND ----------------
-function updateLegend(layerName) {
-
-    let content = "";
-
-    if (layerName === "NDVI" || layerName === "Baseline" || layerName.includes("NDVI")) {
-        content = `
-            <div class="legend-item"><div class="color-box" style="background:white"></div>0</div>
-            <div class="legend-item"><div class="color-box" style="background:green"></div>1</div>
-        `;
-    }
-
-    if (layerName === "Anomaly") {
-        content = `
-            <div class="legend-item"><div class="color-box" style="background:red"></div>Negative</div>
-            <div class="legend-item"><div class="color-box" style="background:white"></div>Normal</div>
-            <div class="legend-item"><div class="color-box" style="background:green"></div>Positive</div>
-        `;
-    }
-
-    document.getElementById("legendContent").innerHTML = content;
 }
 
 // INIT
