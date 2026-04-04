@@ -328,6 +328,93 @@ def get_ndvi_anomaly_timeseries(request):
     #
 
 
+########################################################################################
+########################### get all ndvi layers and display ############################
+########################################################################################
+from django.http import JsonResponse
+import ee
+
+
+def get_ndvi_layers(request):
+    try:
+        date = request.GET.get("date", "2024-01-01")
+
+        # ---------------- IMAGE ----------------
+        image = (
+            ee.ImageCollection("MODIS/061/MOD13A2")
+            .filterDate(date, ee.Date(date).advance(16, "day"))
+            .select("NDVI")
+            .first()
+            .multiply(0.0001)
+        )
+
+        # ---------------- HISTORICAL ----------------
+        historical = (
+            ee.ImageCollection("MODIS/061/MOD13A2")
+            .filterDate("2001-01-01", "2023-12-31")
+            .select("NDVI")
+        )
+
+        date_ee = ee.Date(date)
+        doy = date_ee.getRelative("day", "year")
+
+        seasonal = historical.filter(ee.Filter.dayOfYear(doy, doy.add(15)))
+
+        baseline = seasonal.mean().multiply(0.0001)
+        ndvi_min = seasonal.min().multiply(0.0001)
+        ndvi_max = seasonal.max().multiply(0.0001)
+
+        anomaly = image.subtract(baseline)
+
+        # ---------------- VISUALIZATION ----------------
+        ndvi_vis = {"min": 0, "max": 1, "palette": ["white", "green"]}
+        anomaly_vis = {"min": -0.3, "max": 0.3, "palette": ["red", "white", "green"]}
+
+        # ---------------- TILE URLs ----------------
+        ndvi_tile = image.getMapId(ndvi_vis)["tile_fetcher"].url_format
+        baseline_tile = baseline.getMapId(ndvi_vis)["tile_fetcher"].url_format
+        min_tile = ndvi_min.getMapId(ndvi_vis)["tile_fetcher"].url_format
+        max_tile = ndvi_max.getMapId(ndvi_vis)["tile_fetcher"].url_format
+        anomaly_tile = anomaly.getMapId(anomaly_vis)["tile_fetcher"].url_format
+
+        return JsonResponse(
+            {
+                "ndvi": ndvi_tile,
+                "baseline": baseline_tile,
+                "min": min_tile,
+                "max": max_tile,
+                "anomaly": anomaly_tile,
+            }
+        )
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+########################################################################################
+########################### get all ndvi layers and display ############################
+########################################################################################
+#
+#
+#
+#########################################################################################
+########################### get all ndvi layers and display ############################
+########################################################################################
+#
+#
+#
+########################################################################################
+########################### get all ndvi layers and display ############################
+########################################################################################
+#
+
+########################################################################################
+########################### get all ndvi layers and display ############################
+########################################################################################
+#
+#
+
+
 ###############################################################################
 #
 #
@@ -1045,4 +1132,13 @@ def load_ndvi_ano_rain_map(request):
     return render(request, "load_ndvi_ano_rain_map.html")
 
 
-#
+def load_ndvi_ano_rain_map(request):
+    return render(request, "load_ndvi_ano_rain_map.html")
+
+
+def get_min_max_anom_ndvi_per_pix(request):
+    return render(request, "get_min_max_anom_ndvi_per_pix.html")
+
+
+def load_ndvi_raster_sub_products_min_max_avg_anom(request):
+    return render(request, "load_ndvi_raster_sub_products_min_max_avg_anom.html")

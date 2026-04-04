@@ -31,9 +31,6 @@
     <input type="date" id="end_date" value="2024-03-01">
     <button onclick="enableClick()">🖱 Enable Click</button>
     <button onclick="disableClick()">🚫 Disable Click</button>
-    <label>Date:</label>
-<input type="date" id="date" value="2024-01-01">
-<button onclick="loadNDVILayers()">Load Layers</button>
 </div>
 
 <p id="status"></p>
@@ -73,43 +70,29 @@ function enableClick() { clickEnabled = true; document.getElementById("status").
 function disableClick() { clickEnabled = false; document.getElementById("status").innerText = "Click disabled"; }
 
 // ---------------- LOAD NDVI ANOMALY ----------------
-let layers = {};
+function loadAnomalyTimeSeries(lat, lon) {
+    const start = document.getElementById("start_date").value;
+    const end = document.getElementById("end_date").value;
 
-function loadNDVILayers() {
+    document.getElementById("status").innerText = "Loading NDVI anomaly...";
 
-    const date = document.getElementById("date").value;
-
-    fetch(`/get_ndvi_layers/?date=${date}`)
+    fetch(`/get_ndvi_anomaly_timeseries/?lat=${lat}&lon=${lon}&start_date=${start}&end_date=${end}`)
         .then(res => res.json())
         .then(data => {
+            if (data.error) throw new Error(data.error);
 
-            // Remove old layers
-            Object.values(layers).forEach(l => {
-                if (map.hasLayer(l)) map.removeLayer(l);
-            });
+            const dates = data.data.map(d => d.date);
+            const ndvi = data.data.map(d => d.ndvi);
+            const baseline = data.data.map(d => d.baseline);
+            const anomaly = data.data.map(d => d.anomaly);
+            const max = data.data.map(d => d.max);
+            const min = data.data.map(d => d.min);
 
-            // Create layers
-            layers = {
-                ndvi: L.tileLayer(data.ndvi, { opacity: 0.7 }),
-                baseline: L.tileLayer(data.baseline, { opacity: 0.7 }),
-                min: L.tileLayer(data.min, { opacity: 0.7 }),
-                max: L.tileLayer(data.max, { opacity: 0.7 }),
-                anomaly: L.tileLayer(data.anomaly, { opacity: 0.7 })
-            };
+            drawChart(dates, ndvi, baseline, anomaly, max, min);
 
-            // Add default layer
-            layers.ndvi.addTo(map);
-
-            // Layer control
-            L.control.layers(null, {
-                "NDVI": layers.ndvi,
-                "Baseline": layers.baseline,
-                "Min NDVI": layers.min,
-                "Max NDVI": layers.max,
-                "Anomaly": layers.anomaly
-            }).addTo(map);
-
-        });
+            document.getElementById("status").innerText = "NDVI anomaly loaded";
+        })
+        .catch(err => { console.error(err); alert(err.message); });
 }
 
 // ---------------- DRAW CHART ----------------

@@ -82,4 +82,14 @@ urlpatterns = [
         views.get_ndvi_anomaly_timeseries,
         name="get_ndvi_anomaly_timeseries",
     ),
+    path(
+        "get_min_max_anom_ndvi_per_pix/",
+        views.get_min_max_anom_ndvi_per_pix,
+        name="get_min_max_anom_ndvi_per_pix",
+    ),
+    path("get_ndvi_layers/", views.get_ndvi_layers, name="get_ndvi_layers"),
+    path(
+        "load_ndvi_raster_sub_products_min_max_avg_anom/",
+        views.load_ndvi_raster_sub_products_min_max_avg_anom,
+    ),
 ]
