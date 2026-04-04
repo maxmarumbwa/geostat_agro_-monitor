@@ -1,239 +1,178 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-    <title>NDVI Anomaly Dashboard - Zimbabwe</title>
+    <title>NDVI Dashboard - Zimbabwe</title>
 
     <!-- Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         body {
+            margin: 0;
             font-family: Arial;
-            margin: 20px;
         }
 
-        .controls {
-            margin-bottom: 10px;
-        }
-
-        button {
-            padding: 8px 12px;
-            margin-right: 10px;
-            cursor: pointer;
-        }
-
+        /* ---------------- LAYOUT ---------------- */
         .container {
             display: flex;
-            gap: 20px;
-            margin-top: 15px;
+            height: 100vh;
         }
 
+        /* ---------------- SIDEBAR ---------------- */
+        .sidebar {
+            width: 330px;
+            background: #f4f4f4;
+            padding: 15px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .sidebar h3 {
+            margin-top: 0;
+        }
+
+        .sidebar button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            border: none;
+            background: #ddd;
+            border-radius: 5px;
+        }
+
+        .sidebar button:hover {
+            background: #bbb;
+        }
+
+        /* ---------------- MAP ---------------- */
         #map {
             flex: 1;
-            height: 450px;
         }
 
-        #chart-container {
-            flex: 1;
-        }
-
-        canvas {
-            width: 100%;
-            height: 450px;
+        input, button {
+            font-size: 14px;
         }
     </style>
 </head>
-
 <body>
 
-    <h2>🌿 NDVI Anomaly Dashboard</h2>
+<div class="container">
 
-    <div class="controls">
-        <label>Start:</label>
-        <input type="date" id="start_date" value="2024-01-01">
-        <label>End:</label>
-        <input type="date" id="end_date" value="2024-03-01">
-        <button onclick="enableClick()">🖱 Enable Click</button>
-        <button onclick="disableClick()">🚫 Disable Click</button>
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <h3>🌿 NDVI Layers</h3>
+
         <label>Date:</label>
         <input type="date" id="date" value="2024-01-01">
-        <button onclick="loadNDVILayers()">Load Layers</button>
+
+        <button onclick="loadNDVILayers()">Load Data</button>
+
+        <hr>
+
+        <h4>Toggle Layers</h4>
+
+        <button onclick="showLayer('NDVI')">NDVI</button>
+        <button onclick="showLayer('Baseline')">Baseline</button>
+        <button onclick="showLayer('Min NDVI')">Min NDVI</button>
+        <button onclick="showLayer('Max NDVI')">Max NDVI</button>
+        <button onclick="showLayer('Anomaly')">Anomaly</button>
+
+        <p id="status"></p>
     </div>
 
-    <p id="status"></p>
+    <!-- MAP -->
+    <div id="map"></div>
 
-    <div class="container">
-        <div id="map"></div>
-        <div id="chart-container">
-            <canvas id="chart"></canvas>
-        </div>
-    </div>
+</div>
 
-    <script>
-        let map, marker = null, chart = null;
-        let clickEnabled = false;
-        const zimBounds = [[-22.5, 25], [-15, 34]];
+<script>
 
-        // ---------------- INIT MAP ----------------
-        function initMap() {
-            map = L.map('map', { maxBounds: zimBounds, maxBoundsViscosity: 1.0 }).fitBounds(zimBounds);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { noWrap: true }).addTo(map);
+let map;
+let layers = {};
+let activeLayer = null;
 
-            map.on('click', function (e) {
-                if (!clickEnabled) return;
+const zimBounds = [
+    [-22.5, 25],
+    [-15, 34]
+];
 
-                const lat = e.latlng.lat;
-                const lon = e.latlng.lng;
+// ---------------- INIT MAP ----------------
+function initMap() {
 
-                if (marker) map.removeLayer(marker);
-                marker = L.marker([lat, lon]).addTo(map);
+    map = L.map('map', {
+        maxBounds: zimBounds,
+        maxBoundsViscosity: 1.0
+    }).fitBounds(zimBounds);
 
-                loadAnomalyTimeSeries(lat, lon);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        noWrap: true
+    }).addTo(map);
+}
+
+// ---------------- LOAD LAYERS ----------------
+function loadNDVILayers() {
+
+    const date = document.getElementById("date").value;
+
+    document.getElementById("status").innerText = "Loading layers...";
+
+    fetch(`/get_ndvi_layers/?date=${date}`)
+        .then(res => res.json())
+        .then(data => {
+
+            if (data.error) throw new Error(data.error);
+
+            // Remove old layers
+            Object.values(layers).forEach(l => {
+                if (map.hasLayer(l)) map.removeLayer(l);
             });
-        }
 
-        // ---------------- ENABLE / DISABLE ----------------
-        function enableClick() { clickEnabled = true; document.getElementById("status").innerText = "Click enabled"; }
-        function disableClick() { clickEnabled = false; document.getElementById("status").innerText = "Click disabled"; }
+            // Create layers
+            layers = {
+                "NDVI": L.tileLayer(data.ndvi, { opacity: 0.7, bounds: zimBounds }),
+                "Baseline": L.tileLayer(data.baseline, { opacity: 0.7, bounds: zimBounds }),
+                "Min NDVI": L.tileLayer(data.min, { opacity: 0.7, bounds: zimBounds }),
+                "Max NDVI": L.tileLayer(data.max, { opacity: 0.7, bounds: zimBounds }),
+                "Anomaly": L.tileLayer(data.anomaly, { opacity: 0.7, bounds: zimBounds })
+            };
 
-        // ---------------- LOAD NDVI ANOMALY ----------------
-        let layers = {};
+            // Default layer
+            showLayer("NDVI");
 
-        function loadNDVILayers() {
+            document.getElementById("status").innerText = "Layers loaded";
 
-            const date = document.getElementById("date").value;
+        })
+        .catch(err => {
+            console.error(err);
+            alert(err.message);
+        });
+}
 
-            fetch(`/get_ndvi_layers/?date=${date}`)
-                .then(res => res.json())
-                .then(data => {
+// ---------------- SHOW SELECTED LAYER ----------------
+function showLayer(name) {
 
-                    // Remove old layers
-                    Object.values(layers).forEach(l => {
-                        if (map.hasLayer(l)) map.removeLayer(l);
-                    });
+    if (!layers[name]) {
+        alert("Load data first!");
+        return;
+    }
 
-                    // Create layers
-                    layers = {
-                        ndvi: L.tileLayer(data.ndvi, { opacity: 0.7 }),
-                        baseline: L.tileLayer(data.baseline, { opacity: 0.7 }),
-                        min: L.tileLayer(data.min, { opacity: 0.7 }),
-                        max: L.tileLayer(data.max, { opacity: 0.7 }),
-                        anomaly: L.tileLayer(data.anomaly, { opacity: 0.7 })
-                    };
+    // Remove current
+    if (activeLayer) {
+        map.removeLayer(activeLayer);
+    }
 
-                    // Add default layer
-                    layers.ndvi.addTo(map);
+    // Add new
+    activeLayer = layers[name];
+    activeLayer.addTo(map);
 
-                    // Layer control
-                    L.control.layers(null, {
-                        "NDVI": layers.ndvi,
-                        "Baseline": layers.baseline,
-                        "Min NDVI": layers.min,
-                        "Max NDVI": layers.max,
-                        "Anomaly": layers.anomaly
-                    }).addTo(map);
+    document.getElementById("status").innerText = "Showing: " + name;
+}
 
-                });
-        }
+// INIT
+window.onload = initMap;
 
-        // ---------------- DRAW CHART ----------------
-        function drawChart(labels, ndvi, baseline, anomaly, max, min) {
-            const ctx = document.getElementById("chart").getContext("2d");
-
-            if (chart) chart.destroy();
-
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { label: 'NDVI', data: ndvi, borderColor: 'green', fill: false, tension: 0.3 },
-                        { label: 'Baseline NDVI', data: baseline, borderColor: 'blue', fill: false, tension: 0.3 },
-                        { label: 'NDVI Anomaly', data: anomaly, borderColor: 'red', fill: false, tension: 0.3 },
-                        { label: 'Max NDVI', data: max, borderColor: 'orange', fill: false, tension: 0.3 },
-                        { label: 'Min NDVI', data: min, borderColor: 'purple', fill: false, tension: 0.3 },
-                    ]
-                },
-                options: {
-                    plugins: { legend: { position: 'top' } },
-                    scales: { y: { title: { display: true, text: "NDVI" } } }
-                }
-            });
-        }
-
-        // INIT
-        window.onload = initMap;
-    </script>
+</script>
 
 </body>
-
 </html>
-
-
-
-<!-- ########################################################################################
-########################### get all ndvi layers and display ############################
-########################################################################################
-from django.http import JsonResponse
-import ee
-
-
-def get_ndvi_layers(request):
-    try:
-        date = request.GET.get("date", "2024-01-01")
-
-        # ---------------- IMAGE ----------------
-        image = (
-            ee.ImageCollection("MODIS/061/MOD13A2")
-            .filterDate(date, ee.Date(date).advance(16, "day"))
-            .select("NDVI")
-            .first()
-            .multiply(0.0001)
-        )
-
-        # ---------------- HISTORICAL ----------------
-        historical = (
-            ee.ImageCollection("MODIS/061/MOD13A2")
-            .filterDate("2001-01-01", "2023-12-31")
-            .select("NDVI")
-        )
-
-        date_ee = ee.Date(date)
-        doy = date_ee.getRelative("day", "year")
-
-        seasonal = historical.filter(ee.Filter.dayOfYear(doy, doy.add(15)))
-
-        baseline = seasonal.mean().multiply(0.0001)
-        ndvi_min = seasonal.min().multiply(0.0001)
-        ndvi_max = seasonal.max().multiply(0.0001)
-
-        anomaly = image.subtract(baseline)
-
-        # ---------------- VISUALIZATION ----------------
-        ndvi_vis = {"min": 0, "max": 1, "palette": ["white", "green"]}
-        anomaly_vis = {"min": -0.3, "max": 0.3, "palette": ["red", "white", "green"]}
-
-        # ---------------- TILE URLs ----------------
-        ndvi_tile = image.getMapId(ndvi_vis)["tile_fetcher"].url_format
-        baseline_tile = baseline.getMapId(ndvi_vis)["tile_fetcher"].url_format
-        min_tile = ndvi_min.getMapId(ndvi_vis)["tile_fetcher"].url_format
-        max_tile = ndvi_max.getMapId(ndvi_vis)["tile_fetcher"].url_format
-        anomaly_tile = anomaly.getMapId(anomaly_vis)["tile_fetcher"].url_format
-
-        return JsonResponse(
-            {
-                "ndvi": ndvi_tile,
-                "baseline": baseline_tile,
-                "min": min_tile,
-                "max": max_tile,
-                "anomaly": anomaly_tile,
-            }
-        )
-
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500) -->
