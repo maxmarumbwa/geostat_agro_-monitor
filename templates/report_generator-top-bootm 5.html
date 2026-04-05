@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Zimbabwe · District VCI Report | Dynamic Ranking + Map Baselayer Toggle</title>
-    <!-- Leaflet -->
+    <title>Zimbabwe · District VCI Report | Top & Bottom 5 Districts + Map Highlight</title>
+    <!-- Leaflet CSS + JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- Chart.js -->
@@ -46,19 +46,6 @@
         }
         label { font-weight: 600; font-size: 0.75rem; color: #2d5a43; display: block; margin-top: 10px; margin-bottom: 5px; }
         select, input { width: 100%; padding: 8px 12px; border-radius: 30px; border: 1px solid #cbdcd2; background: white; font-size: 0.85rem; }
-        .rank-control-group {
-            display: flex;
-            gap: 12px;
-            align-items: flex-end;
-            flex-wrap: wrap;
-        }
-        .rank-control-group div { flex: 1; }
-        .rank-control-group button {
-            width: auto;
-            margin-top: 0;
-            padding: 8px 16px;
-            background: #2c7a47;
-        }
         .province-selector {
             display: flex;
             flex-wrap: wrap;
@@ -117,12 +104,7 @@
             font-weight: 700;
             color: #1e4a36;
             border-left: 6px solid #2c7a47;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
         }
-        .card-title small { font-size: 0.7rem; font-weight: normal; background: #e2ecda; padding: 4px 10px; border-radius: 40px; }
         .card-content { padding: 1.2rem; }
         .stats-grid {
             display: grid;
@@ -166,8 +148,6 @@
         .stress-moderate { background: #fff3cd; color: #856404; }
         .stress-good { background: #d4edda; color: #155724; }
         .legend-color { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 5px; vertical-align: middle; }
-        .map-toolbar { display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 10px; align-items: center; }
-        .toggle-switch { display: inline-flex; align-items: center; gap: 6px; background: #f0f5ed; padding: 4px 12px; border-radius: 40px; font-size: 0.7rem; font-weight: 500; cursor: pointer; }
         footer { text-align: center; font-size: 0.65rem; color: #8aa394; margin-top: 1rem; }
         .warning-note { background: #fff3cd; border-radius: 20px; padding: 8px; font-size: 0.7rem; text-align: center; }
     </style>
@@ -175,15 +155,15 @@
 <body>
 
 <div class="app-header">
-    <h1>🇿🇼 Zimbabwe · District VCI Report | Dynamic Ranking + Map Baselayer Toggle</h1>
+    <h1>🇿🇼 Zimbabwe · District VCI Report + Top/Bottom 5 Highlight Map</h1>
     <div class="badge">VCI threshold = 36 (drought stress)</div>
 </div>
 
 <div class="dashboard-main">
-    <!-- LEFT CONTROL PANEL -->
+    <!-- LEFT CONTROLS -->
     <div class="control-panel">
         <div class="ctrl-card">
-            <h3>📍 1. Select Districts (max 6) for detailed analysis</h3>
+            <h3>📍 1. Select Provinces (max 6) for detailed sub-report</h3>
             <div id="provinceChecklist" class="province-selector"><div class="status-msg">Loading districts...</div></div>
             <div class="status-msg" id="provinceCounter">0/6 selected</div>
         </div>
@@ -202,6 +182,7 @@
             <input type="date" id="mapStartDate" value="2024-02-01">
             <label>End Date</label>
             <input type="date" id="mapEndDate" value="2024-02-16">
+            <div class="status-msg">VCI map = tile overlay + district highlighting</div>
         </div>
 
         <div class="ctrl-card">
@@ -232,22 +213,9 @@
             </div>
         </div>
 
-        <!-- NEW: RANKING SETTINGS CARD -->
-        <div class="ctrl-card">
-            <h3>🏆 Ranking Settings (Top / Bottom N)</h3>
-            <div class="rank-control-group">
-                <div>
-                    <label>Number of districts</label>
-                    <input type="number" id="rankLimit" value="5" min="1" max="20" step="1">
-                </div>
-                <button id="applyRankingBtn" style="margin-top: 18px;">🔄 Apply Ranking</button>
-            </div>
-            <div class="status-msg" style="margin-top:8px;">Change N and click "Apply Ranking" to refresh table + map highlights</div>
-        </div>
-
         <button id="generateReportBtn">📄 GENERATE COMPLETE REPORT</button>
         <button id="exportPdfBtn" class="btn-secondary" style="margin-top: 8px;">📑 EXPORT PDF</button>
-        <div id="genStatus" class="status-msg">Ready — includes dynamic ranking & map baselayer toggle</div>
+        <div id="genStatus" class="status-msg">Ready — includes TOP/BOTTOM 5 districts by VCI + map highlight</div>
     </div>
 
     <!-- RIGHT REPORT PANEL -->
@@ -257,24 +225,20 @@
                 <h2>🌍 Zimbabwe Vegetation Health Report (NDVI + VCI)</h2>
             </div>
             <div id="dynamicReportArea">
-                <div class="warning-note">⬅️ Configure parameters, select districts and click GENERATE. Use ranking controls to adjust Top/Bottom N, and toggle VCI baselayer on the map.</div>
+                <div class="warning-note">⬅️ Configure parameters, select provinces and click GENERATE. The report includes district VCI ranking (top/bottom 5) + dedicated map highlighting those districts over VCI layer.</div>
             </div>
-            <footer>NDVI & VCI based on MODIS 16‑day composites | VCI = (NDVI - min)/(max-min)*100 | Highlight: 🔴 RED = bottom N (lowest VCI), 🟢 GREEN = top N (highest VCI).</footer>
+            <footer>NDVI & VCI based on MODIS 16‑day composites | VCI = (NDVI - min)/(max-min)*100 | Map highlight: 🔴 RED = bottom 5 (lowest VCI), 🟢 GREEN = top 5 (highest VCI). Black outlines = all districts.</footer>
         </div>
     </div>
 </div>
 
 <script>
     // ---------- GLOBALS ----------
-    let districtList = [];          // { name, geometry }
+    let districtList = [];          // { name, geometry, properties }
     let selectedProvinces = [];
     let chartInstances = {};
-    let fullGeoJsonLayer = null;
-    let allDistrictsWithVCI = [];   // stored VCI array for ranking updates
-    let currentMapStartDate = "", currentMapEndDate = "";
-    let highlightMapRef = null;      // Leaflet map instance for the highlight map
-    let vciTileLayerRef = null;      // VCI raster layer reference for toggle
-    let currentHighlightGeoms = { bottom: [], top: [] };
+    let fullGeoJsonLayer = null;    // raw geojson (districts)
+    let districtVCIvalues = [];     // store for ranking
     
     const zimBounds = L.latLngBounds(L.latLng(-22.5, 25.5), L.latLng(-15.6, 32.5));
 
@@ -329,7 +293,7 @@
     function updateSelectedProvinces(provName, isChecked) {
         if (isChecked) {
             if (selectedProvinces.length >= 6) {
-                alert("Maximum 6 districts allowed for detailed analysis.");
+                alert("Maximum 6 districts/provinces allowed for detailed analysis.");
                 const cb = document.querySelector(`input[value="${provName}"]`);
                 if (cb) cb.checked = false;
                 return;
@@ -341,7 +305,7 @@
         document.getElementById("provinceCounter").innerHTML = `${selectedProvinces.length}/6 selected`;
     }
 
-    // Simulate realistic NDVI time series for selected districts
+    // Simulate realistic NDVI time series for selected provinces
     async function fetchDistrictTimeSeries(districtName, startDate, endDate) {
         return new Promise(resolve => {
             setTimeout(() => {
@@ -376,35 +340,42 @@
         return ndviArray.map(ndvi => ((ndvi - minNdvi) / (maxNdvi - minNdvi)) * 100);
     }
 
-    // Deterministic VCI for a district based on name and reference period
+    // ----- DISTRICT VCI for reference period (deterministic, realistic variation) -----
     function computeDistrictVCIForPeriod(districtName, mapStartDate, mapEndDate) {
+        // deterministic but plausible VCI value per district based on name hash + seasonal factor
         const dateObj = new Date(mapStartDate);
-        const month = dateObj.getMonth();
-        const seasonalFactor = 0.6 + 0.25 * Math.sin((month - 2) * Math.PI / 6);
+        const month = dateObj.getMonth(); // 0-11
+        const seasonalFactor = 0.6 + 0.25 * Math.sin((month - 2) * Math.PI / 6); // wet season boost
         let hash = 0;
         for(let i=0; i<districtName.length; i++) hash += districtName.charCodeAt(i);
-        const baseGreen = ((hash % 97) / 97) * 0.65 + 0.2;
+        const baseGreen = ((hash % 97) / 97) * 0.65 + 0.2; // 0.2-0.85 range
         let ndvi = baseGreen * seasonalFactor;
         ndvi = Math.min(0.68, Math.max(0.22, ndvi));
+        // historical min/max to compute VCI: min ~ 0.2*ndvi, max ~ 1.5*ndvi
         let minNdvi = ndvi * 0.55;
         let maxNdvi = ndvi * 1.45;
         minNdvi = Math.max(0.15, minNdvi);
         maxNdvi = Math.min(0.78, maxNdvi);
         let vciRaw = ((ndvi - minNdvi) / (maxNdvi - minNdvi)) * 100;
         vciRaw = Math.min(98, Math.max(8, vciRaw));
+        // add subtle jitter based on name length
         let jitter = (districtName.length % 7) * 1.2;
         vciRaw = vciRaw + (jitter - 3);
         vciRaw = Math.min(97, Math.max(5, vciRaw));
         return Math.round(vciRaw);
     }
 
-    // Helper to render any map with tile & optional geometry
-    async function renderMapSimple(containerId, layerType, startDate, endDate, addAllBoundaries = false) {
-        if (window._mapInstances && window._mapInstances[containerId]) window._mapInstances[containerId].remove();
+    // ----- RENDER MAP helper (with tile & optional highlight geometry) -----
+    async function renderMapSimple(containerId, layerType, startDate, endDate, addAllBoundaries = false, highlightGeom = null, highlightStyle = null) {
+        if (window._mapInstances && window._mapInstances[containerId]) {
+            window._mapInstances[containerId].remove();
+        }
         const container = document.getElementById(containerId);
         if (!container) return;
         let map = L.map(container).setView([-19.5, 29.5], 6);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap & CartoDB', bounds: zimBounds }).addTo(map);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap & CartoDB', bounds: zimBounds
+        }).addTo(map);
         let tileUrl = null;
         try {
             const response = await fetch(`/get_ndvi_layers/?start_date=${startDate}&end_date=${endDate}`);
@@ -416,10 +387,20 @@
                 else if (layerType === "VCI") tileUrl = data.vci;
             }
         } catch(e) {}
-        if (tileUrl) L.tileLayer(tileUrl, { opacity: 0.75, bounds: zimBounds }).addTo(map);
-        else L.rectangle(zimBounds, { color: '#aaa', weight: 1, fillOpacity: 0.1 }).addTo(map);
+        if (tileUrl) {
+            L.tileLayer(tileUrl, { opacity: 0.75, bounds: zimBounds }).addTo(map);
+        } else {
+            L.rectangle(zimBounds, { color: '#aaa', weight: 1, fillOpacity: 0.1 }).addTo(map);
+        }
         if (addAllBoundaries && fullGeoJsonLayer) {
-            L.geoJSON(fullGeoJsonLayer, { style: { color: '#000000', weight: 1.5, fillOpacity: 0, opacity: 0.6, dashArray: '3' }, onEachFeature: (f,layer)=>layer.bindTooltip(f.properties?.ADM2_EN || "District") }).addTo(map);
+            L.geoJSON(fullGeoJsonLayer, {
+                style: { color: '#000000', weight: 1.5, fillOpacity: 0, opacity: 0.6, dashArray: '3' },
+                onEachFeature: (feature, layer) => layer.bindTooltip(feature.properties?.ADM2_EN || "District", { sticky: true })
+            }).addTo(map);
+        }
+        if (highlightGeom) {
+            let style = highlightStyle || { color: '#ff4444', weight: 3, fillOpacity: 0.2, fillColor: '#ff0000' };
+            L.geoJSON(highlightGeom, { style: style }).addTo(map);
         }
         map.fitBounds(zimBounds);
         if (!window._mapInstances) window._mapInstances = {};
@@ -428,131 +409,53 @@
         return map;
     }
 
-    // --- Build ranking table from stored VCI data ---
-    function buildRankingTable(limit) {
-        if (!allDistrictsWithVCI.length) return "<tr><td colspan='5'>No VCI data available. Generate report first.</td></tr>";
-        const sortedLow = [...allDistrictsWithVCI].sort((a,b) => a.vci - b.vci);
-        const bottomN = sortedLow.slice(0, limit);
-        const sortedHigh = [...allDistrictsWithVCI].sort((a,b) => b.vci - a.vci);
-        const topN = sortedHigh.slice(0, limit);
-        let html = `<table class="district-table"><thead><tr><th>Rank</th><th>District</th><th>VCI (%)</th><th>Health Status</th><th>VCI vs Threshold (${document.getElementById("vciThreshold").value})</th></tr></thead><tbody>`;
-        let rank = 1;
-        for (let d of bottomN) {
-            let status = d.vci < 36 ? "🔴 Drought Stress" : (d.vci < 50 ? "🟡 Moderate" : "✅ Good");
-            let badgeClass = d.vci < 36 ? "stress-critical" : (d.vci < 50 ? "stress-moderate" : "stress-good");
-            html += `<tr><td><b>${rank} (worst)</b></td><td>${d.name}</td><td><b>${d.vci}%</b></td><td><span class="${badgeClass}" style="padding:2px 8px; border-radius:20px;">${status}</span></td><td>${d.vci < 36 ? '⬇️ Below threshold' : 'Above'}</td></tr>`;
-            rank++;
-        }
-        rank = 1;
-        for (let d of topN) {
-            let status = d.vci >= 60 ? "🌿 Lush" : (d.vci >= 45 ? "Fair" : "Moderate");
-            html += `<tr><td><b>${rank} (best)</b></td><td>${d.name}</td><td><b>${d.vci}%</b></td><td><span class="stress-good" style="background:#d4edda; padding:2px 8px; border-radius:20px;">${status}</span></td><td>⬆️ Healthy VCI</td></tr>`;
-            rank++;
-        }
-        html += `</tbody></table>`;
-        return html;
-    }
-
-    // Update highlight map with new bottom/top geoms and baselayer toggle ability
-    async function updateHighlightMap(bottomGeoms, topGeoms, vciTileUrl) {
-        const mapContainer = document.getElementById("vciHighlightMap");
-        if (!mapContainer) return;
-        if (highlightMapRef) highlightMapRef.remove();
-        let map = L.map(mapContainer).setView([-19.5, 29.5], 6);
-        // Base basemap
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap & CartoDB' }).addTo(map);
-        // VCI tile layer (stored for toggle)
-        let vciLayer = null;
-        if (vciTileUrl) {
-            vciLayer = L.tileLayer(vciTileUrl, { opacity: 0.8, bounds: zimBounds });
-            vciLayer.addTo(map);
-        } else {
-            L.rectangle(zimBounds, { color: '#aaa', weight: 1, fillOpacity: 0.1 }).addTo(map);
-        }
-        // All district boundaries (light)
-        if (fullGeoJsonLayer) {
-            L.geoJSON(fullGeoJsonLayer, { style: { color: '#2c3e2f', weight: 1.2, fillOpacity: 0, opacity: 0.6 }, onEachFeature: (f,layer)=>layer.bindTooltip(f.properties?.ADM2_EN || "District") }).addTo(map);
-        }
-        // Add highlighted geometries
-        bottomGeoms.forEach(geom => { if(geom) L.geoJSON(geom, { style: { color: '#d9534f', weight: 4, fillOpacity: 0.35, fillColor: '#d9534f' } }).addTo(map); });
-        topGeoms.forEach(geom => { if(geom) L.geoJSON(geom, { style: { color: '#5cb85c', weight: 4, fillOpacity: 0.35, fillColor: '#5cb85c' } }).addTo(map); });
-        map.fitBounds(zimBounds);
-        highlightMapRef = map;
-        vciTileLayerRef = vciLayer;
-        // attach toggle handler to checkbox (will be recreated)
-        const toggleCheckbox = document.getElementById("toggleBaselayerCheckbox");
-        if (toggleCheckbox) {
-            toggleCheckbox.checked = true;
-            toggleCheckbox.onchange = (e) => {
-                if (vciTileLayerRef) {
-                    if (e.target.checked) vciTileLayerRef.addTo(highlightMapRef);
-                    else vciTileLayerRef.remove();
-                }
-            };
-        }
-        setTimeout(() => map.invalidateSize(), 150);
-    }
-
-    // Refresh ranking table + map based on current N
-    async function refreshRankingOnly() {
-        if (!allDistrictsWithVCI.length) { alert("No VCI data. Please generate full report first."); return; }
-        const rankLimit = parseInt(document.getElementById("rankLimit").value) || 5;
-        const vciThresh = document.getElementById("vciThreshold").value;
-        // update table inside ranking card
-        const rankingTableContainer = document.getElementById("dynamicRankingTable");
-        if (rankingTableContainer) rankingTableContainer.innerHTML = buildRankingTable(rankLimit);
-        
-        // Recompute bottom/top geometries
-        const sortedLow = [...allDistrictsWithVCI].sort((a,b) => a.vci - b.vci);
-        const bottomN = sortedLow.slice(0, rankLimit);
-        const sortedHigh = [...allDistrictsWithVCI].sort((a,b) => b.vci - a.vci);
-        const topN = sortedHigh.slice(0, rankLimit);
-        const bottomGeoms = bottomN.map(d => d.geometry);
-        const topGeoms = topN.map(d => d.geometry);
-        currentHighlightGeoms = { bottom: bottomGeoms, top: topGeoms };
-        // fetch VCI tile url again
-        let vciTileUrl = null;
-        try {
-            const resp = await fetch(`/get_ndvi_layers/?start_date=${currentMapStartDate}&end_date=${currentMapEndDate}`);
-            if (resp.ok) { const d = await resp.json(); vciTileUrl = d.vci; }
-        } catch(e) {}
-        await updateHighlightMap(bottomGeoms, topGeoms, vciTileUrl);
-    }
-
-    // ---------- MAIN REPORT GENERATION ----------
+    // ----- CORE: Generate full report including TOP/BOTTOM 5 districts table & highlight map -----
     async function generateFullReport() {
-        if (!fullGeoJsonLayer) { alert("District boundaries not loaded."); return; }
+        if (!fullGeoJsonLayer) { alert("District boundaries not loaded. Cannot generate report."); return; }
+        if (selectedProvinces.length === 0) alert("Please select at least one district/province for detailed analysis (max 6).");
+        
         const tsStart = document.getElementById("tsStart").value;
         const tsEnd = document.getElementById("tsEnd").value;
         const mapStartDate = document.getElementById("mapStartDate").value;
         const mapEndDate = document.getElementById("mapEndDate").value;
-        currentMapStartDate = mapStartDate;
-        currentMapEndDate = mapEndDate;
         const vciThreshold = parseFloat(document.getElementById("vciThreshold").value);
         const selectedLayers = Array.from(document.querySelectorAll('.layerOption:checked')).map(cb => cb.value);
         const selectedGraphVars = Array.from(document.querySelectorAll('.graphVar:checked')).map(cb => cb.value);
-        const rankLimit = parseInt(document.getElementById("rankLimit").value) || 5;
         
-        document.getElementById("genStatus").innerHTML = "⏳ Computing district VCI & generating report...";
+        document.getElementById("genStatus").innerHTML = "⏳ Computing district VCI ranking & generating report...";
         const reportDiv = document.getElementById("dynamicReportArea");
-        reportDiv.innerHTML = `<div style="text-align:center; padding:20px;">Processing ${districtList.length} districts...</div>`;
+        reportDiv.innerHTML = `<div style="text-align:center; padding:20px;">Processing ${districtList.length} districts for VCI ranking...</div>`;
         
-        // compute VCI for all districts
-        allDistrictsWithVCI = [];
+        // 1) Compute VCI for ALL districts (reference period)
+        let allDistrictsWithVCI = [];
         for (let dist of districtList) {
             let vci = computeDistrictVCIForPeriod(dist.name, mapStartDate, mapEndDate);
             allDistrictsWithVCI.push({ name: dist.name, vci: vci, geometry: dist.geometry, properties: dist.properties });
         }
+        // sort asc/desc for bottom/top
+        let sortedLow = [...allDistrictsWithVCI].sort((a,b) => a.vci - b.vci);
+        let bottom5 = sortedLow.slice(0,5);
+        let top5 = [...allDistrictsWithVCI].sort((a,b) => b.vci - a.vci).slice(0,5);
         
-        const sortedLow = [...allDistrictsWithVCI].sort((a,b) => a.vci - b.vci);
-        const bottomN = sortedLow.slice(0, rankLimit);
-        const sortedHigh = [...allDistrictsWithVCI].sort((a,b) => b.vci - a.vci);
-        const topN = sortedHigh.slice(0, rankLimit);
+        // Build Table HTML
+        let tableHtml = `<table class="district-table">
+            <thead><tr><th>Rank</th><th>District</th><th>VCI (%)</th><th>Health Status</th><th>VCI vs Threshold (${vciThreshold})</th></tr></thead><tbody>`;
+        let rank = 1;
+        for (let d of bottom5) {
+            let status = d.vci < vciThreshold ? "🔴 Drought Stress" : (d.vci < 50 ? "🟡 Moderate" : "✅ Good");
+            let badgeClass = d.vci < vciThreshold ? "stress-critical" : (d.vci < 50 ? "stress-moderate" : "stress-good");
+            tableHtml += `<tr><td><b>${rank} (worst)</b></td><td>${d.name}</td><td><b>${d.vci}%</b></td><td><span class="${badgeClass}" style="padding:2px 8px; border-radius:20px;">${status}</span></td><td>${d.vci < vciThreshold ? '⬇️ Below threshold' : 'Above'}</td></tr>`;
+            rank++;
+        }
+        rank = 1;
+        for (let d of top5) {
+            let status = d.vci >= 60 ? "🌿 Lush" : (d.vci >= 45 ? "Fair" : "Moderate");
+            tableHtml += `<tr><td><b>${rank} (best)</b></td><td>${d.name}</td><td><b>${d.vci}%</b></td><td><span class="stress-good" style="background:#d4edda; padding:2px 8px; border-radius:20px;">${status}</span></td><td>⬆️ Healthy VCI</td></tr>`;
+            rank++;
+        }
+        tableHtml += `</tbody></table>`;
         
-        // Table HTML
-        let tableHtml = buildRankingTable(rankLimit);
-        
-        // Selected districts detailed data
+        // 2) Collect selected province detailed data (existing logic)
         let allProvData = [];
         for (let prov of selectedProvinces) {
             const geom = districtList.find(p => p.name === prov)?.geometry;
@@ -562,67 +465,83 @@
                 allProvData.push({ name: prov, data: ts, geometry: geom, vci: vciValues });
             }
         }
-        let nationalMeanNDVI = "—", nationalMeanVCI = "—";
+        let nationalMeanNDVI = "—", nationalMeanAnomaly = "—", nationalMeanVCI = "—";
         if (allProvData.length) {
-            let allNDVI = [], allVCI = [];
+            let allNDVI = [], allAnomaly = [], allVCI = [];
             for (let p of allProvData) {
                 allNDVI.push(p.data.ndvi.reduce((a,b)=>a+b,0)/p.data.ndvi.length);
+                allAnomaly.push(p.data.anomaly.reduce((a,b)=>a+b,0)/p.data.anomaly.length);
                 allVCI.push(p.vci.reduce((a,b)=>a+b,0)/p.vci.length);
             }
             nationalMeanNDVI = (allNDVI.reduce((a,b)=>a+b,0)/allNDVI.length).toFixed(3);
+            nationalMeanAnomaly = (allAnomaly.reduce((a,b)=>a+b,0)/allAnomaly.length).toFixed(3);
             nationalMeanVCI = (allVCI.reduce((a,b)=>a+b,0)/allVCI.length).toFixed(0);
         }
         
+        let execInsight = `For the selected districts, mean NDVI = ${nationalMeanNDVI}, anomaly = ${nationalMeanAnomaly}, mean VCI = ${nationalMeanVCI}%. Nationwide, the 5 districts with lowest VCI (worst vegetation health) show values as low as ${bottom5[0]?.vci}%, indicating severe drought stress. The top 5 districts reach VCI up to ${top5[0]?.vci}%.`;
+        
         let reportHtml = `
             <div class="exec-card">
-                <div class="card-title">📊 Executive Summary · Vegetation Health</div>
+                <div class="card-title">📊 Executive Summary · Vegetation Health & District VCI Rankings</div>
                 <div class="card-content">
                     <div class="stats-grid">
                         <div class="stat-block"><div class="stat-number">${nationalMeanNDVI}</div><div class="stat-label">Mean NDVI (selected)</div></div>
                         <div class="stat-block"><div class="stat-number">${nationalMeanVCI}%</div><div class="stat-label">Mean VCI (selected)</div></div>
-                        <div class="stat-block"><div class="stat-number">⬇️ ${bottomN[0]?.vci || '-'}%</div><div class="stat-label">Lowest District VCI</div></div>
-                        <div class="stat-block"><div class="stat-number">⬆️ ${topN[0]?.vci || '-'}%</div><div class="stat-label">Highest District VCI</div></div>
+                        <div class="stat-block"><div class="stat-number">⬇️ ${bottom5[0]?.vci}%</div><div class="stat-label">Lowest District VCI</div></div>
+                        <div class="stat-block"><div class="stat-number">⬆️ ${top5[0]?.vci}%</div><div class="stat-label">Highest District VCI</div></div>
                     </div>
-                    <div class="insight-text">💡 <strong>Insight:</strong> Based on VCI threshold ${vciThreshold}%, the most critical districts are ${bottomN.map(d=>d.name).slice(0,3).join(', ')}.</div>
+                    <div class="insight-text">💡 <strong>Key insight:</strong> ${execInsight} VCI threshold = ${vciThreshold}%.</div>
+                    <div class="insight-text">📌 <strong>Priority zones:</strong> ${bottom5.map(d=>d.name).join(', ')} need urgent drought interventions.</div>
                 </div>
             </div>
             
-            <div class="district-rank-card" id="rankingCard">
-                <div class="card-title">🏆 District VCI Ranking · Bottom & Top ${rankLimit} <small><span id="rankInfo">Adjust N and click Apply Ranking</span></small></div>
-                <div class="card-content">
-                    <p><strong>Reference period:</strong> ${mapStartDate} to ${mapEndDate}</p>
-                    <div id="dynamicRankingTable">${tableHtml}</div>
-                </div>
-            </div>
-            
+            <!-- TOP/BOTTOM 5 DISTRICTS TABLE -->
             <div class="district-rank-card">
-                <div class="card-title">🗺️ VCI Interactive Map · Highlighted Districts 
-                    <div class="map-toolbar">
-                        <label class="toggle-switch"><input type="checkbox" id="toggleBaselayerCheckbox" checked> 🗺️ Show VCI Baselayer</label>
-                    </div>
-                </div>
+                <div class="card-title">🏆 District VCI Ranking · Bottom 5 (Lowest Vegetation Health) & Top 5 (Highest VCI)</div>
                 <div class="card-content">
-                    <div id="vciHighlightMap" style="height: 480px; width: 100%; border-radius: 20px; border: 1px solid #dee6da;"></div>
-                    <div class="map-caption">🔴 RED = bottom ${rankLimit} (lowest VCI) &nbsp;&nbsp; 🟢 GREEN = top ${rankLimit} (highest VCI). Toggle baselayer to switch VCI raster on/off.</div>
+                    <p><strong>Reference period:</strong> ${mapStartDate} to ${mapEndDate} · VCI computed from NDVI / historical range. 🔴 Critical drought when VCI &lt; ${vciThreshold}.</p>
+                    ${tableHtml}
                 </div>
             </div>
             
+            <!-- HIGHLIGHT MAP: VCI LAYER + BOTTOM/TOP 5 DISTRICTS STYLED -->
+            <div class="district-rank-card">
+                <div class="card-title">🗺️ VCI Interactive Map · Highlighted Top & Bottom 5 Districts</div>
+                <div class="card-content">
+                    <div id="vciHighlightMap" style="height: 480px; width: 100%; border-radius: 20px; border: 1px solid #dee6da; z-index: 1;"></div>
+                    <div class="map-caption" style="margin-top: 8px;">red <span class="legend-color" style="background:#d9534f;"></span> Bottom 5 districts (lowest VCI) &nbsp;&nbsp; #0275d8  <span class="legend-color" style="background:#5cb85c;"></span> Top 5 districts (highest VCI) · Background = VCI satellite-derived layer (16‑day composite). Black outlines = district boundaries.</div>
+                </div>
+            </div>
+            
+            <!-- NATIONAL MAPS (optional raster layers) -->
             <div class="national-maps-card">
-                <div class="card-title">🗺️ National Vegetation Maps (selected layers)</div>
-                <div class="card-content"><div class="maps-grid" id="nationalMapsGrid"></div></div>
+                <div class="card-title">🗺️ National Vegetation Maps (selected layers) · ${mapStartDate} to ${mapEndDate}</div>
+                <div class="card-content">
+                    <div class="maps-grid" id="nationalMapsGrid"></div>
+                </div>
             </div>
         `;
         
-        // province detailed cards
+        // Append province-level detailed cards
         for (let prov of allProvData) {
-            const { name, data, vci } = prov;
+            const { name, data, geometry, vci } = prov;
             const meanVCI = vci.reduce((a,b)=>a+b,0)/vci.length;
             const chartId = `chart_${name.replace(/\s/g,'')}`;
-            reportHtml += `<div class="province-block"><div class="card-title">📍 ${name} · Time series</div><div class="card-content"><div class="stats-grid"><div class="stat-block"><div class="stat-number">${meanVCI.toFixed(0)}%</div><div class="stat-label">Mean VCI</div></div></div><div class="chart-container"><canvas id="${chartId}"></canvas></div></div></div>`;
+            reportHtml += `
+                <div class="province-block">
+                    <div class="card-title">📍 ${name} · Time series (VCI & NDVI)</div>
+                    <div class="card-content">
+                        <div class="stats-grid"><div class="stat-block"><div class="stat-number">${meanVCI.toFixed(0)}%</div><div class="stat-label">Mean VCI</div></div></div>
+                        <div class="chart-container"><canvas id="${chartId}"></canvas></div>
+                        <p>Monthly VCI & NDVI trends over period ${tsStart} to ${tsEnd}</p>
+                    </div>
+                </div>
+            `;
         }
+        
         reportDiv.innerHTML = reportHtml;
         
-        // render national maps grid
+        // Render national maps grid
         const nationalGrid = document.getElementById("nationalMapsGrid");
         if (nationalGrid) {
             nationalGrid.innerHTML = "";
@@ -630,13 +549,13 @@
                 const mapDivId = `nat_map_${layer}`;
                 const mapCard = document.createElement("div");
                 mapCard.className = "map-single";
-                mapCard.innerHTML = `<h5>${layer} · Zimbabwe</h5><div id="${mapDivId}" class="mini-map"></div>`;
+                mapCard.innerHTML = `<h5>${layer} · Zimbabwe</h5><div id="${mapDivId}" class="mini-map"></div><div class="map-caption">District boundaries (black dashed).</div>`;
                 nationalGrid.appendChild(mapCard);
                 await renderMapSimple(mapDivId, layer, mapStartDate, mapEndDate, true);
             }
         }
         
-        // charts
+        // Draw charts for selected provinces
         for (let prov of allProvData) {
             const { name, data, vci } = prov;
             const chartId = `chart_${name.replace(/\s/g,'')}`;
@@ -656,29 +575,46 @@
             }
         }
         
-        // build highlight map with VCI tile
-        let vciTileUrl = null;
-        try {
-            const resp = await fetch(`/get_ndvi_layers/?start_date=${mapStartDate}&end_date=${mapEndDate}`);
-            if (resp.ok) { const d = await resp.json(); vciTileUrl = d.vci; }
-        } catch(e) {}
-        const bottomGeoms = bottomN.map(d => d.geometry);
-        const topGeoms = topN.map(d => d.geometry);
-        currentHighlightGeoms = { bottom: bottomGeoms, top: topGeoms };
-        await updateHighlightMap(bottomGeoms, topGeoms, vciTileUrl);
+        // --- HIGHLIGHT MAP: VCI tile + bottom5/top5 polygons ---
+        const mapContainer = document.getElementById("vciHighlightMap");
+        if (mapContainer && fullGeoJsonLayer) {
+            if (window._vciHighlightMap) window._vciHighlightMap.remove();
+            let highlightMap = L.map(mapContainer).setView([-19.5, 29.5], 6);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png').addTo(highlightMap);
+            // fetch VCI tile
+            let vciTileUrl = null;
+            try {
+                const resp = await fetch(`/get_ndvi_layers/?start_date=${mapStartDate}&end_date=${mapEndDate}`);
+                if (resp.ok) { const d = await resp.json(); vciTileUrl = d.vci; }
+            } catch(e) {}
+            if (vciTileUrl) L.tileLayer(vciTileUrl, { opacity: 0.8, bounds: zimBounds }).addTo(highlightMap);
+            else L.rectangle(zimBounds, { color: '#aaa', weight: 1, fillOpacity: 0.1 }).addTo(highlightMap);
+            // add all district boundaries (light)
+            L.geoJSON(fullGeoJsonLayer, { style: { color: '#2c3e2f', weight: 1.2, fillOpacity: 0, opacity: 0.6 }, onEachFeature: (f,layer)=>layer.bindTooltip(f.properties?.ADM2_EN || "District") }).addTo(highlightMap);
+            // add bottom5 (red highlight)
+            const bottomGeoms = bottom5.map(d => d.geometry);
+            const topGeoms = top5.map(d => d.geometry);
+            bottomGeoms.forEach(geom => {
+                if(geom) L.geoJSON(geom, { style: { color: '#d9534f', weight: 4, fillOpacity: 0.3, fillColor: '#d9534f' } }).addTo(highlightMap);
+            });
+            topGeoms.forEach(geom => {
+                if(geom) L.geoJSON(geom, { style: { color: '#5cb85c', weight: 4, fillOpacity: 0.3, fillColor: '#5cb85c' } }).addTo(highlightMap);
+            });
+            highlightMap.fitBounds(zimBounds);
+            window._vciHighlightMap = highlightMap;
+            setTimeout(() => highlightMap.invalidateSize(), 150);
+        }
         
-        document.getElementById("genStatus").innerHTML = "✅ Report ready. Use ranking controls and baselayer toggle.";
+        document.getElementById("genStatus").innerHTML = "✅ Report ready: Top/Bottom 5 VCI districts table + highlight map (VCI overlay). Use PDF export.";
     }
     
-    // PDF export
     function exportReportPDF() {
         const element = document.getElementById("reportContent");
-        html2pdf().set({ margin: [0.5, 0.5, 0.5, 0.5], filename: `Zimbabwe_VCI_Ranking_${new Date().toISOString().slice(0,10)}.pdf`, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' } }).from(element).save();
+        html2pdf().set({ margin: [0.5, 0.5, 0.5, 0.5], filename: `Zimbabwe_VCI_TopBottom_${new Date().toISOString().slice(0,10)}.pdf`, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' } }).from(element).save();
     }
     
     document.getElementById("generateReportBtn").addEventListener("click", generateFullReport);
     document.getElementById("exportPdfBtn").addEventListener("click", exportReportPDF);
-    document.getElementById("applyRankingBtn").addEventListener("click", refreshRankingOnly);
     loadDistricts();
 </script>
 </body>
