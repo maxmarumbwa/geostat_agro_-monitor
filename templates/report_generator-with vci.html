@@ -197,9 +197,12 @@
         </div>
 
         <div class="ctrl-card">
-            <h3>🗺️ 3. Map Reference Date</h3>
-            <label>Date for National & Provincial Maps</label>
-            <input type="date" id="mapDate" value="2024-02-15">
+            <h3>🗺️ 3. Map Reference Period (16‑day window)</h3>
+            <label>Start Date</label>
+            <input type="date" id="mapStartDate" value="2024-02-01">
+            <label>End Date</label>
+            <input type="date" id="mapEndDate" value="2024-02-16">
+            <div class="status-msg" style="margin-top:5px;">NDVI mean over this 16‑day window</div>
         </div>
 
         <div class="ctrl-card">
@@ -246,7 +249,7 @@
             <div id="dynamicReportArea">
                 <div class="warning-note">⬅️ Select 1–6 provinces, set dates and VCI threshold, choose raster layers and graph variables, then click GENERATE.</div>
             </div>
-            <footer>NDVI & VCI simulated based on seasonal patterns | VCI = (NDVI - min_NDVI)/(max_NDVI - min_NDVI)*100 | Threshold 36 indicates drought stress | Polygon boundaries = black</footer>
+            <footer>NDVI & VCI based on MODIS 16‑day composites | VCI = (NDVI - min_NDVI)/(max_NDVI - min_NDVI)*100 | Threshold 36 indicates drought stress | Polygon boundaries = black</footer>
         </div>
     </div>
 </div>
@@ -262,32 +265,23 @@
     // Zimbabwe precise bounds
     const zimBounds = L.latLngBounds(L.latLng(-22.5, 25.5), L.latLng(-15.6, 32.5));
 
-    // ---------- LOAD PROVINCES (GeoJSON with fallback) ----------
+    // ---------- LOAD PROVINCES (GeoJSON only - no mock data) ----------
     async function loadProvinces() {
         try {
             let response = await fetch('/static/geojson/zimadm2.geojson');
-            if (!response.ok) throw new Error('No GeoJSON');
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             let geoJson = await response.json();
+            if (!geoJson.features || geoJson.features.length === 0) throw new Error('GeoJSON has no features');
             extractProvinces(geoJson);
             fullGeoJsonLayer = geoJson;
+            renderProvinceCheckboxes();
         } catch(e) {
-            console.warn("Using mock provinces for Zimbabwe with boundaries");
-            const mockGeo = {
-                type: "FeatureCollection",
-                features: [
-                    { type: "Feature", properties: { ADM2_EN: "Harare" }, geometry: { type: "Polygon", coordinates: [[[31.0,-17.8],[31.2,-17.8],[31.2,-18.0],[31.0,-18.0],[31.0,-17.8]]] } },
-                    { type: "Feature", properties: { ADM2_EN: "Bulawayo" }, geometry: { type: "Polygon", coordinates: [[[28.5,-20.1],[28.7,-20.1],[28.7,-20.3],[28.5,-20.3],[28.5,-20.1]]] } },
-                    { type: "Feature", properties: { ADM2_EN: "Manicaland" }, geometry: { type: "Polygon", coordinates: [[[32.2,-18.5],[32.6,-18.5],[32.6,-19.2],[32.2,-19.2],[32.2,-18.5]]] } },
-                    { type: "Feature", properties: { ADM2_EN: "Mashonaland West" }, geometry: { type: "Polygon", coordinates: [[[29.5,-16.5],[30.5,-16.5],[30.5,-17.2],[29.5,-17.2],[29.5,-16.5]]] } },
-                    { type: "Feature", properties: { ADM2_EN: "Midlands" }, geometry: { type: "Polygon", coordinates: [[[29.2,-19.0],[30.0,-19.0],[30.0,-19.8],[29.2,-19.8],[29.2,-19.0]]] } },
-                    { type: "Feature", properties: { ADM2_EN: "Masvingo" }, geometry: { type: "Polygon", coordinates: [[[30.5,-20.0],[31.2,-20.0],[31.2,-20.8],[30.5,-20.8],[30.5,-20.0]]] } },
-                    { type: "Feature", properties: { ADM2_EN: "Matabeleland North" }, geometry: { type: "Polygon", coordinates: [[[27.0,-18.2],[28.0,-18.2],[28.0,-19.0],[27.0,-19.0],[27.0,-18.2]]] } }
-                ]
-            };
-            extractProvinces(mockGeo);
-            fullGeoJsonLayer = mockGeo;
+            console.error("Failed to load province GeoJSON:", e);
+            document.getElementById("provinceChecklist").innerHTML = `<div class="status-msg" style="background:#f8d7da; color:#721c24;">❌ Failed to load province boundaries. Please ensure /static/geojson/zimadm2.geojson exists.</div>`;
+            document.getElementById("provinceCounter").innerText = `0/0 selected (GeoJSON unavailable)`;
+            provinceList = [];
+            fullGeoJsonLayer = null;
         }
-        renderProvinceCheckboxes();
     }
 
     function extractProvinces(geoJson) {
@@ -302,6 +296,10 @@
     function renderProvinceCheckboxes() {
         const container = document.getElementById("provinceChecklist");
         if (!container) return;
+        if (provinceList.length === 0) {
+            container.innerHTML = `<div class="status-msg" style="background:#fff3cd;">No provinces loaded. Check GeoJSON file.</div>`;
+            return;
+        }
         container.innerHTML = "";
         provinceList.forEach(prov => {
             const div = document.createElement("div");
@@ -373,7 +371,7 @@
     }
 
     // ---------- MAP RENDER with POLYGON OVERLAY (black boundaries) ----------
-    async function renderMap(containerId, layerType, mapDate, geometry = null, addFullBoundaries = false, highlightGeometry = null) {
+    async function renderMap(containerId, layerType, startDate, endDate, geometry = null, addFullBoundaries = false, highlightGeometry = null) {
         if (mapInstances[containerId]) {
             mapInstances[containerId].remove();
             delete mapInstances[containerId];
@@ -386,10 +384,10 @@
             bounds: zimBounds
         }).addTo(map);
         
-        // Fetch actual tile if available (including VCI)
+        // Fetch actual tile using start_date & end_date
         let tileUrl = null;
         try {
-            const response = await fetch(`/get_ndvi_layers/?date=${mapDate}`);
+            const response = await fetch(`/get_ndvi_layers/?start_date=${startDate}&end_date=${endDate}`);
             if (response.ok) {
                 const data = await response.json();
                 if (layerType === "NDVI") tileUrl = data.ndvi;
@@ -403,10 +401,10 @@
             let rasterLayer = L.tileLayer(tileUrl, { opacity: 0.75, bounds: zimBounds });
             rasterLayer.addTo(map);
         } else {
-            // Mock visual with appropriate color
-            let mockColor = layerType === "NDVI" ? "#2c7a47" : (layerType === "Baseline" ? "#3a86ff" : (layerType === "Anomaly" ? "#d62828" : "#ff9f1c"));
-            let mockOverlay = L.rectangle(zimBounds, { color: mockColor, weight: 1, fillOpacity: 0.15, opacity: 0.6 });
-            mockOverlay.addTo(map);
+            // No mock raster fallback – just show a message
+            let msg = L.rectangle(zimBounds, { color: '#999', weight: 1, fillOpacity: 0.1, opacity: 0.5 });
+            msg.bindTooltip("Raster data not available").openTooltip();
+            msg.addTo(map);
         }
         
         // --- ADD POLYGON OVERLAY (Province Boundaries) - BLACK color ---
@@ -442,12 +440,17 @@
             alert("Please select at least one province (max 6).");
             return;
         }
+        if (!fullGeoJsonLayer) {
+            alert("Province boundaries not loaded. Cannot generate report.");
+            return;
+        }
         const tsStart = document.getElementById("tsStart").value;
         const tsEnd = document.getElementById("tsEnd").value;
-        const mapDate = document.getElementById("mapDate").value;
+        const mapStartDate = document.getElementById("mapStartDate").value;
+        const mapEndDate = document.getElementById("mapEndDate").value;
         const vciThreshold = parseFloat(document.getElementById("vciThreshold").value);
-        if (!tsStart || !tsEnd || !mapDate) {
-            alert("Please fill both time series dates and map date.");
+        if (!tsStart || !tsEnd || !mapStartDate || !mapEndDate) {
+            alert("Please fill both time series dates and map reference period (start & end).");
             return;
         }
         const selectedLayers = [];
@@ -520,7 +523,7 @@
             
             <!-- NATIONAL MAPS with PROVINCE BOUNDARIES OVERLAY (black) -->
             <div class="national-maps-card">
-                <div class="card-title">🗺️ National Vegetation Maps with Province Boundaries · ${mapDate}</div>
+                <div class="card-title">🗺️ National Vegetation Maps with Province Boundaries · ${mapStartDate} to ${mapEndDate}</div>
                 <div class="card-content">
                     <div class="maps-grid" id="nationalMapsGrid"></div>
                     <div class="map-caption">Dashed black lines = Zimbabwe province boundaries. Selected provinces highlighted in solid black outline.</div>
@@ -538,8 +541,6 @@
             const meanVCI = vci.reduce((a,b)=>a+b,0)/vci.length;
             const stressCountVCI = vci.filter(v => v < vciThreshold).length;
             const percentStressVCI = (stressCountVCI / vci.length) * 100;
-            const minNDVI = Math.min(...ndvi);
-            const maxNDVI = Math.max(...ndvi);
             const deficitPct = ((meanBaseline - meanNDVI) / meanBaseline) * 100;
             
             let healthStatusProv = meanVCI < vciThreshold ? "Severe Drought Stress" : (meanVCI < 50 ? "Moderate Stress" : "Fair / Good");
@@ -587,7 +588,7 @@
         
         reportDiv.innerHTML = reportHtml;
         
-        // Render National Maps
+        // Render National Maps (using start & end date)
         const nationalGrid = document.getElementById("nationalMapsGrid");
         if (nationalGrid) {
             nationalGrid.innerHTML = "";
@@ -595,9 +596,9 @@
                 const mapDivId = `nat_map_${layer}`;
                 const mapCard = document.createElement("div");
                 mapCard.className = "map-single";
-                mapCard.innerHTML = `<h5>${layer} · Zimbabwe (${mapDate})</h5><div id="${mapDivId}" class="mini-map"></div><div class="map-caption">Province boundaries overlaid (black dashed).</div>`;
+                mapCard.innerHTML = `<h5>${layer} · Zimbabwe (${mapStartDate} to ${mapEndDate})</h5><div id="${mapDivId}" class="mini-map"></div><div class="map-caption">Province boundaries overlaid (black dashed).</div>`;
                 nationalGrid.appendChild(mapCard);
-                await renderMap(mapDivId, layer, mapDate, null, true, null);
+                await renderMap(mapDivId, layer, mapStartDate, mapEndDate, null, true, null);
             }
         }
         
@@ -633,7 +634,7 @@
                     mapCard.className = "map-single";
                     mapCard.innerHTML = `<h5>${layer} · ${name}</h5><div id="${mapDivId}" class="mini-map"></div><div class="map-caption">Province-specific map with black boundary highlight</div>`;
                     provMapsDiv.appendChild(mapCard);
-                    await renderMap(mapDivId, layer, mapDate, geometry, false, geometry);
+                    await renderMap(mapDivId, layer, mapStartDate, mapEndDate, geometry, false, geometry);
                 }
             }
         }
