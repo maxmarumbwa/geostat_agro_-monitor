@@ -97,4 +97,9 @@ urlpatterns = [
         views.get_ndvi_zonal_timeseries,
         name="get_ndvi_zonal_timeseries",
     ),
+    path(
+        "report_generator/",
+        views.report_generator,
+        name="report_generator",
+    ),
 ]

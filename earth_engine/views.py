@@ -1242,3 +1242,7 @@ def get_min_max_anom_ndvi_per_pix(request):
 
 def load_ndvi_raster_sub_products_min_max_avg_anom(request):
     return render(request, "load_ndvi_raster_sub_products_min_max_avg_anom.html")
+
+
+def report_generator(request):
+    return render(request, "report_generator.html")
