@@ -89,6 +89,11 @@ urlpatterns = [
     ),
     path("get_ndvi_layers/", views.get_ndvi_layers, name="get_ndvi_layers"),
     path(
+        "get_ndvi_layers_start_end/",
+        views.get_ndvi_layers_start_end,
+        name="get_ndvi_layers_start_end",
+    ),
+    path(
         "load_ndvi_raster_sub_products_min_max_avg_anom/",
         views.load_ndvi_raster_sub_products_min_max_avg_anom,
     ),
