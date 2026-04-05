@@ -102,4 +102,9 @@ urlpatterns = [
         views.report_generator,
         name="report_generator",
     ),
+    # path(
+    #     "get_all_vegetation_tiles/",
+    #     views.get_all_vegetation_tiles,
+    #     name="get_all_vegetation_tiles",
+    # ),
 ]

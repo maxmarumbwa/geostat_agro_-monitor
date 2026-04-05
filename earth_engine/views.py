@@ -59,12 +59,18 @@ def get_ndvi_tile(request):
 ############################  NDVI anomaly map #######################
 ################################################################################################
 #
-
 from django.http import JsonResponse
 import ee
 
 
 def get_ndvi_anomaly_tile(request):
+    """
+    Returns tile URLs for NDVI anomaly, VCI, historical min, max, and mean NDVI
+    over Zimbabwe for a given date.
+
+    Query parameters:
+        date (str): ISO date (YYYY-MM-DD), default '2024-01-01'
+    """
     try:
         date = request.GET.get("date", "2024-01-01")
 
@@ -80,7 +86,7 @@ def get_ndvi_anomaly_tile(request):
         target_date = ee.Date(date)
 
         # -----------------------------
-        # 2. CURRENT NDVI
+        # 2. Current NDVI (MODIS 16-day composite)
         # -----------------------------
         current = (
             ee.ImageCollection("MODIS/061/MOD13A2")
@@ -91,52 +97,153 @@ def get_ndvi_anomaly_tile(request):
         )
 
         # -----------------------------
-        # 3. BASELINE NDVI (multi-year)
-        # Example: 2001–2023 same period
+        # 3. Historical baseline (2001–2023, same DOY range)
         # -----------------------------
-        baseline = (
+        start_doy = target_date.getRelative("day", "year")
+        end_doy = start_doy.add(16)
+
+        baseline_coll = (
             ee.ImageCollection("MODIS/061/MOD13A2")
             .filter(ee.Filter.calendarRange(2001, 2023, "year"))
-            .filter(
-                ee.Filter.dayOfYear(
-                    target_date.getRelative("day", "year"),
-                    target_date.getRelative("day", "year").add(16),
-                )
-            )
+            .filter(ee.Filter.dayOfYear(start_doy, end_doy))
             .select("NDVI")
-            .mean()
-            .multiply(0.0001)
         )
 
-        # -----------------------------
-        # 4. ANOMALY
-        # -----------------------------
-        anomaly = current.subtract(baseline)
+        # Scale factor 0.0001 applied after reduction
+        baseline_mean = baseline_coll.mean().multiply(0.0001)
+        baseline_min = baseline_coll.min().multiply(0.0001)
+        baseline_max = baseline_coll.max().multiply(0.0001)
 
         # -----------------------------
-        # 5. Clip to Zimbabwe
+        # 4. Derived indices
+        # -----------------------------
+        # NDVI anomaly
+        anomaly = current.subtract(baseline_mean)
+
+        # VCI = (current - min) / (max - min)
+        vci = ee.Image.expression(
+            "(current - min) / (max - min)",
+            {"current": current, "min": baseline_min, "max": baseline_max},
+        )
+        vci = vci.where(vci.lt(0), 0).where(vci.gt(1), 1)
+
+        # -----------------------------
+        # 5. Clip all images to Zimbabwe
         # -----------------------------
         anomaly = anomaly.clip(zimbabwe)
+        vci = vci.clip(zimbabwe)
+        baseline_mean = baseline_mean.clip(zimbabwe)
+        baseline_min = baseline_min.clip(zimbabwe)
+        baseline_max = baseline_max.clip(zimbabwe)
 
         # -----------------------------
-        # 6. Visualization
+        # 6. Visualization parameters for each layer
         # -----------------------------
-        vis_params = {
-            "min": -0.5,
-            "max": 0.5,
-            "palette": [
-                "brown",  # negative anomaly (stress)
-                "yellow",
-                "green",  # positive anomaly
-            ],
+        vis_anomaly = {"min": -0.5, "max": 0.5, "palette": ["brown", "yellow", "green"]}
+        vis_vci = {"min": 0, "max": 1, "palette": ["brown", "yellow", "green"]}
+        vis_ndvi = {
+            "min": 0,
+            "max": 0.8,
+            "palette": ["red", "yellow", "green", "darkgreen"],
         }
 
-        map_id = anomaly.getMapId(vis_params)
+        # -----------------------------
+        # 7. Get tile URLs
+        # -----------------------------
+        def get_tile_url(image, vis):
+            return image.getMapId(vis)["tile_fetcher"].url_format
 
-        return JsonResponse({"tile_url": map_id["tile_fetcher"].url_format})
+        response = {
+            "anomaly_tile_url": get_tile_url(anomaly, vis_anomaly),
+            "vci_tile_url": get_tile_url(vci, vis_vci),
+            "baseline_mean_tile_url": get_tile_url(baseline_mean, vis_ndvi),
+            "baseline_min_tile_url": get_tile_url(baseline_min, vis_ndvi),
+            "baseline_max_tile_url": get_tile_url(baseline_max, vis_ndvi),
+        }
+
+        return JsonResponse(response)
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+# from django.http import JsonResponse
+# import ee
+
+
+# def get_ndvi_anomaly_tile(request):
+#     try:
+#         date = request.GET.get("date", "2024-01-01")
+
+#         # -----------------------------
+#         # 1. Zimbabwe boundary
+#         # -----------------------------
+#         zimbabwe = (
+#             ee.FeatureCollection("FAO/GAUL/2015/level0")
+#             .filter(ee.Filter.eq("ADM0_NAME", "Zimbabwe"))
+#             .geometry()
+#         )
+
+#         target_date = ee.Date(date)
+
+#         # -----------------------------
+#         # 2. CURRENT NDVI
+#         # -----------------------------
+#         current = (
+#             ee.ImageCollection("MODIS/061/MOD13A2")
+#             .filterDate(target_date, target_date.advance(16, "day"))
+#             .select("NDVI")
+#             .mean()
+#             .multiply(0.0001)
+#         )
+
+#         # -----------------------------
+#         # 3. BASELINE NDVI (multi-year)
+#         # Example: 2001–2023 same period
+#         # -----------------------------
+#         baseline = (
+#             ee.ImageCollection("MODIS/061/MOD13A2")
+#             .filter(ee.Filter.calendarRange(2001, 2023, "year"))
+#             .filter(
+#                 ee.Filter.dayOfYear(
+#                     target_date.getRelative("day", "year"),
+#                     target_date.getRelative("day", "year").add(16),
+#                 )
+#             )
+#             .select("NDVI")
+#             .mean()
+#             .multiply(0.0001)
+#         )
+
+#         # -----------------------------
+#         # 4. ANOMALY
+#         # -----------------------------
+#         anomaly = current.subtract(baseline)
+
+#         # -----------------------------
+#         # 5. Clip to Zimbabwe
+#         # -----------------------------
+#         anomaly = anomaly.clip(zimbabwe)
+
+#         # -----------------------------
+#         # 6. Visualization
+#         # -----------------------------
+#         vis_params = {
+#             "min": -0.5,
+#             "max": 0.5,
+#             "palette": [
+#                 "brown",  # negative anomaly (stress)
+#                 "yellow",
+#                 "green",  # positive anomaly
+#             ],
+#         }
+
+#         map_id = anomaly.getMapId(vis_params)
+
+#         return JsonResponse({"tile_url": map_id["tile_fetcher"].url_format})
+
+#     except Exception as e:
+#         return JsonResponse({"error": str(e)}, status=500)
 
 
 ##########################################################
@@ -331,6 +438,7 @@ def get_ndvi_anomaly_timeseries(request):
 ########################################################################################
 ########################### get all ndvi layers and display ############################
 ########################################################################################
+
 from django.http import JsonResponse
 import ee
 
@@ -360,15 +468,48 @@ def get_ndvi_layers(request):
 
         seasonal = historical.filter(ee.Filter.dayOfYear(doy, doy.add(15)))
 
-        baseline = seasonal.mean().multiply(0.0001)
-        ndvi_min = seasonal.min().multiply(0.0001)
-        ndvi_max = seasonal.max().multiply(0.0001)
+        # Scale all seasonal images
+        seasonal_scaled = seasonal.map(lambda img: img.multiply(0.0001))
 
+        baseline = seasonal_scaled.mean()
+        ndvi_min = seasonal_scaled.min()
+        ndvi_max = seasonal_scaled.max()
+
+        # ---------------- ANOMALY ----------------
         anomaly = image.subtract(baseline)
+
+        # ---------------- VCI ----------------
+        vci = (
+            image.subtract(ndvi_min)
+            .divide(ndvi_max.subtract(ndvi_min))
+            .multiply(100)
+            .rename("VCI")
+        )
+
+        # Optional: handle division by zero
+        vci = vci.where(ndvi_max.eq(ndvi_min), 0)
 
         # ---------------- VISUALIZATION ----------------
         ndvi_vis = {"min": 0, "max": 1, "palette": ["white", "green"]}
-        anomaly_vis = {"min": -0.3, "max": 0.3, "palette": ["red", "white", "green"]}
+
+        anomaly_vis = {
+            "min": -0.3,
+            "max": 0.3,
+            "palette": ["red", "white", "green"],
+        }
+
+        vci_vis = {
+            "min": 0,
+            "max": 100,
+            "palette": [
+                "darkred",  # extreme drought
+                "red",
+                "orange",
+                "yellow",
+                "lightgreen",
+                "green",  # healthy vegetation
+            ],
+        }
 
         # ---------------- TILE URLs ----------------
         ndvi_tile = image.getMapId(ndvi_vis)["tile_fetcher"].url_format
@@ -376,6 +517,7 @@ def get_ndvi_layers(request):
         min_tile = ndvi_min.getMapId(ndvi_vis)["tile_fetcher"].url_format
         max_tile = ndvi_max.getMapId(ndvi_vis)["tile_fetcher"].url_format
         anomaly_tile = anomaly.getMapId(anomaly_vis)["tile_fetcher"].url_format
+        vci_tile = vci.getMapId(vci_vis)["tile_fetcher"].url_format
 
         return JsonResponse(
             {
@@ -384,6 +526,7 @@ def get_ndvi_layers(request):
                 "min": min_tile,
                 "max": max_tile,
                 "anomaly": anomaly_tile,
+                "vci": vci_tile,  # ✅ NEW
             }
         )
 

@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NDVI & VCI Dashboard - Zimbabwe</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Leaflet Draw -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Arial; background: #1e2a2e; }
+        .container { display: flex; height: 100vh; }
+        .sidebar { width: 380px; background: #f4f6f8; padding: 1rem; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+        #map { flex: 1; position: relative; }
+        .chart-container { margin-top: auto; background: white; border-radius: 12px; padding: 10px; }
+        canvas { max-height: 260px; width: 100%; }
+        button { background: #2c7a47; border: none; color: white; padding: 6px 12px; border-radius: 20px; cursor: pointer; margin: 5px 2px; }
+        .mode-toggle { display: flex; gap: 10px; }
+        .mode-btn { background: #6c757d; flex: 1; }
+        .mode-btn.active { background: #2c7a47; }
+        .status { font-size: 0.8rem; margin-top: 10px; padding: 8px; background: #e9ecef; border-radius: 8px; }
+        hr { margin: 15px 0; }
+        .loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #2c7a47; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .export-buttons { margin-top: 5px; display: flex; gap: 5px; }
+
+        /* CHART LEGEND */
+        #chart-legend div { display: flex; align-items: center; font-size: 0.85rem; }
+        #chart-legend span { display: inline-block; width: 12px; height: 12px; margin-right: 4px; }
+        #chart-legend .baseline { border-top: 2px dashed blue; height: 0; background: none; }
+        #chart-legend { display:flex; justify-content:space-around; margin-bottom:5px; }
+
+        /* MAP LEGEND */
+        #map-legend {
+            position: absolute;
+            bottom: 30px;
+            left: 10px;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 0 6px rgba(0,0,0,0.3);
+            font-size: 12px;
+            line-height: 1.4;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+<div class="sidebar">
+
+    <h3>🌿 NDVI & VCI Dashboard</h3>
+
+    <label>📅 Map Date:</label>
+    <input type="date" id="date" value="2024-01-01" style="width:100%;">
+    <button id="reloadBtn">⟳ Reload map</button>
+    <hr>
+
+    <div>
+        <h4>🎞️ Animation Control</h4>
+        <label>Start Date:</label>
+        <input type="date" id="animStart" value="2024-01-01" style="width:100%; margin-bottom:3px;">
+        <label>End Date:</label>
+        <input type="date" id="animEnd" value="2024-06-01" style="width:100%; margin-bottom:3px;">
+        <label>Speed (ms per frame):</label>
+        <input type="number" id="animSpeed" value="1500" style="width:100%;" min="200">
+        <label>Layer to Animate:</label>
+        <select id="animLayer" style="width:100%; margin-bottom:5px;">
+            <option value="NDVI">NDVI</option>
+            <option value="Baseline">Baseline</option>
+            <option value="Anomaly">Anomaly</option>
+            <option value="VCI">VCI (Vegetation Condition Index)</option>
+        </select>
+        <button id="startAnimationBtn">▶️ Start Animation</button>
+        <button id="stopAnimationBtn">⏹ Stop Animation</button>
+
+        <!-- CURRENT DATE DISPLAY -->
+        <div style="margin-top:5px;">
+            <strong>Current Animation Date:</strong> <span id="animCurrentDate">—</span>
+        </div>
+    </div>
+    <hr>
+
+    <label>📊 Time Series:</label>
+    <input type="date" id="start_date" value="2024-01-01" style="width:100%;">
+    <input type="date" id="end_date" value="2024-06-01" style="width:100%; margin-top:5px;">
+
+    <hr>
+
+    <h4>🗺️ Layers</h4>
+    <button onclick="showLayer('NDVI')">🌱 NDVI</button>
+    <button onclick="showLayer('Baseline')">📊 Baseline</button>
+    <button onclick="showLayer('Anomaly')">⚠️ Anomaly</button>
+    <button onclick="showLayer('VCI')">💧 VCI (Veg Condition)</button>
+
+    <hr>
+
+    <h4>🔄 Mode</h4>
+    <div class="mode-toggle">
+        <button id="pixelBtn" class="mode-btn">📍 Pixel</button>
+        <button id="polyBtn" class="mode-btn active">🗺 Province</button>
+    </div>
+
+    <button onclick="enableDrawing()">✏️ Draw Custom Region</button>
+
+    <div id="infoText">Click a province</div>
+
+    <div class="chart-container">
+        <!-- CHART LEGEND -->
+        <div id="chart-legend">
+            <div><span style="background:green;"></span>NDVI</div>
+            <div><span class="baseline"></span>Baseline</div>
+            <div><span style="background:red;"></span>Anomaly</div>
+        </div>
+
+        <canvas id="chart"></canvas>
+        <div class="export-buttons">
+            <button onclick="exportCSV()">💾 Export CSV</button>
+            <button onclick="exportPNG()">🖼 Export PNG</button>
+        </div>
+        <div id="status" class="status">Ready</div>
+    </div>
+
+</div>
+
+<div id="map">
+    <div id="map-legend"></div>
+</div>
+
+</div>
+
+<script>
+let map, layers = {}, activeLayer;
+let chart = null;
+let chartDataStore = null;
+let mode = "polygon";
+let currentPoint = null;
+let currentProvince = null;
+let geoLayer = null;
+let animationInterval = null;
+let drawnItems = new L.FeatureGroup();
+
+// Zimbabwe bounds
+const zimBounds = L.latLngBounds(L.latLng(-23.5, 25.3), L.latLng(-15.6, 32.0));
+
+// ---------------- INIT ----------------
+function initMap() {
+    map = L.map('map').setView([-19, 29], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    map.addLayer(drawnItems);
+    loadLayers();
+    loadGeoJSON();
+
+    document.getElementById("reloadBtn").onclick = reloadAll;
+    document.getElementById("pixelBtn").onclick = () => setMode("pixel");
+    document.getElementById("polyBtn").onclick = () => setMode("polygon");
+
+    map.on('click', function(e) {
+        if (mode !== "pixel") return;
+        const lat = e.latlng.lat;
+        const lon = e.latlng.lng;
+        currentPoint = {lat, lon};
+        document.getElementById("infoText").innerText = `📍 Pixel: ${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+        loadPixelTimeSeries(lat, lon);
+    });
+
+    map.fitBounds(zimBounds);
+}
+
+// ---------------- MODE ----------------
+function setMode(m) {
+    mode = m;
+    document.getElementById("pixelBtn").classList.toggle("active", m==="pixel");
+    document.getElementById("polyBtn").classList.toggle("active", m==="polygon");
+    document.getElementById("infoText").innerText = (m==="pixel") ? "Click map" : "Click a province";
+    if (chart) chart.destroy();
+}
+
+// ---------------- LAYER LOADING (supports NDVI, Baseline, Anomaly, VCI) ----------------
+function loadLayers() {
+    const date = document.getElementById("date").value;
+    fetch(`/get_ndvi_layers/?date=${date}`)
+        .then(res => res.json())
+        .then(data => {
+            if (activeLayer) map.removeLayer(activeLayer);
+            layers = {
+                "NDVI": L.tileLayer(data.ndvi, { bounds: zimBounds, maxBounds: zimBounds }),
+                "Baseline": L.tileLayer(data.baseline, { bounds: zimBounds, maxBounds: zimBounds }),
+                "Anomaly": L.tileLayer(data.anomaly, { bounds: zimBounds, maxBounds: zimBounds }),
+                "VCI": L.tileLayer(data.vci, { bounds: zimBounds, maxBounds: zimBounds })
+            };
+            // Default to NDVI
+            showLayer("NDVI");
+            map.fitBounds(zimBounds);
+        })
+        .catch(err => {
+            console.error("Layer load error:", err);
+            document.getElementById("status").innerHTML = "❌ Failed to load layers";
+        });
+}
+
+function showLayer(name) {
+    if (activeLayer) map.removeLayer(activeLayer);
+    activeLayer = layers[name];
+    if (activeLayer) {
+        activeLayer.addTo(map);
+        updateMapLegend(name);
+    } else {
+        console.warn(`Layer ${name} not found`);
+    }
+}
+
+// For animation: dynamically fetch and switch layer for a specific date
+function showLayerForDate(name, date, callback) {
+    if (!date) return;
+    fetch(`/get_ndvi_layers/?date=${date}`)
+        .then(res => res.json())
+        .then(data => {
+            let tileUrl = null;
+            if (name === "NDVI") tileUrl = data.ndvi;
+            else if (name === "Baseline") tileUrl = data.baseline;
+            else if (name === "Anomaly") tileUrl = data.anomaly;
+            else if (name === "VCI") tileUrl = data.vci;
+            if (!tileUrl) {
+                if (callback) callback();
+                return;
+            }
+            const newLayer = L.tileLayer(tileUrl, { bounds: zimBounds, maxBounds: zimBounds });
+            newLayer.on('load', () => {
+                if (activeLayer) map.removeLayer(activeLayer);
+                activeLayer = newLayer;
+                activeLayer.addTo(map);
+                updateMapLegend(name);
+                if (callback) callback();
+            });
+            // Edge case: if load fails quickly, still call callback after timeout
+            setTimeout(() => { if (callback) callback(); }, 500);
+        })
+        .catch(err => {
+            console.error("Animation layer error:", err);
+            if (callback) callback();
+        });
+}
+
+// ---------------- ANIMATION ----------------
+function getDatesBetween(startDate, endDate) {
+    let dates = [];
+    let current = new Date(startDate);
+    const end = new Date(endDate);
+    while(current <= end){
+        dates.push(current.toISOString().split("T")[0]);
+        current.setDate(current.getDate() + 16);
+    }
+    return dates;
+}
+
+function animateDates() {
+    if (animationInterval) clearInterval(animationInterval);
+    const start = document.getElementById("animStart").value;
+    const end = document.getElementById("animEnd").value;
+    const speed = parseInt(document.getElementById("animSpeed").value);
+    const layerName = document.getElementById("animLayer").value;
+    if (!start || !end) return alert("Set start and end dates for animation");
+    const demoDates = getDatesBetween(start, end);
+    if (demoDates.length === 0) return alert("No dates in range");
+    let idx = 0;
+    animationInterval = setInterval(() => {
+        const date = demoDates[idx % demoDates.length];
+        document.getElementById("date").value = date;
+        document.getElementById("animCurrentDate").innerText = date;
+
+        showLayerForDate(layerName, date, () => {
+            // After map updates, refresh timeseries if needed (keep existing behavior)
+            if (mode === "pixel" && currentPoint) loadPixelTimeSeries(currentPoint.lat, currentPoint.lon);
+            if (mode === "polygon" && currentProvince && geoLayer) {
+                geoLayer.eachLayer(layer => {
+                    if (layer.feature && layer.feature.properties.ADM2_EN === currentProvince) {
+                        loadPolygonTimeSeries(layer.feature.geometry, currentProvince);
+                    }
+                });
+            }
+        });
+
+        document.getElementById("status").innerHTML = `🎞️ Animating ${layerName}: ${date}`;
+        idx++;
+    }, speed);
+}
+
+function stopAnimation() {
+    clearInterval(animationInterval);
+    animationInterval = null;
+    document.getElementById("status").innerHTML = "Animation stopped";
+    document.getElementById("animCurrentDate").innerText = "—";
+}
+
+document.getElementById("startAnimationBtn").onclick = animateDates;
+document.getElementById("stopAnimationBtn").onclick = stopAnimation;
+
+// ---------------- MAP LEGEND (with VCI support) ----------------
+function updateMapLegend(layerName) {
+    const legend = document.getElementById("map-legend");
+    if (!layerName || !layers[layerName]) { legend.innerHTML = ""; return; }
+
+    if(layerName === "NDVI") {
+        legend.innerHTML = `
+            <b>NDVI</b><br>
+            <i style="background:#d73027;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> -0.2<br>
+            <i style="background:#fc8d59;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.0<br>
+            <i style="background:#fee08b;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.2<br>
+            <i style="background:#d9ef8b;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.4<br>
+            <i style="background:#91cf60;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.6<br>
+            <i style="background:#1a9850;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.8+
+        `;
+    } else if(layerName === "Baseline") {
+        legend.innerHTML = `
+            <b>Baseline NDVI</b><br>
+            <i style="background:#f7fbff;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0<br>
+            <i style="background:#c6dbef;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.2<br>
+            <i style="background:#6baed6;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.4<br>
+            <i style="background:#2171b5;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.6<br>
+            <i style="background:#084594;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.8+
+        `;
+    } else if(layerName === "Anomaly") {
+        legend.innerHTML = `
+            <b>Anomaly</b><br>
+            <i style="background:#d73027;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> -0.5<br>
+            <i style="background:#fc8d59;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> -0.25<br>
+            <i style="background:#ffffbf;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0<br>
+            <i style="background:#91cf60;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.25<br>
+            <i style="background:#1a9850;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0.5+
+        `;
+    } else if(layerName === "VCI") {
+        legend.innerHTML = `
+            <b>VCI (Vegetation Condition Index)</b><br>
+            <i style="background:#8b0000;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 0-15 (Extreme Drought)<br>
+            <i style="background:#ff0000;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 15-30 (Severe Drought)<br>
+            <i style="background:#ffa500;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 30-40 (Moderate Drought)<br>
+            <i style="background:#ffff00;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 40-60 (Stressed)<br>
+            <i style="background:#90ee90;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 60-80 (Healthy)<br>
+            <i style="background:#008000;width:16px;height:16px;display:inline-block;margin-right:4px;"></i> 80-100 (Lush)
+        `;
+    }
+}
+
+// ---------------- GEOJSON ----------------
+function loadGeoJSON() {
+    fetch('/static/geojson/zimadm2.geojson')
+        .then(res => res.json())
+        .then(data => {
+            geoLayer = L.geoJSON(data, {
+                style: { color: 'yellow', weight: 2 },
+                onEachFeature: function(feature, layer) {
+                    const name = feature.properties.ADM2_EN;
+                    layer.bindTooltip(name);
+                    layer.on('click', () => {
+                        if (mode !== "polygon") return;
+                        currentProvince = name;
+                        document.getElementById("infoText").innerText = `🗺 ${name}`;
+                        loadPolygonTimeSeries(feature.geometry, name);
+                    });
+                }
+            }).addTo(map);
+        })
+        .catch(err => console.error("GeoJSON load error:", err));
+}
+
+// ---------------- PIXEL TIMESERIES (NDVI, Baseline, Anomaly - kept intact) ----------------
+function loadPixelTimeSeries(lat, lon) {
+    const start = document.getElementById("start_date").value;
+    const end = document.getElementById("end_date").value;
+    const status = document.getElementById("status");
+    status.innerHTML = `<span class="loading-spinner"></span> Loading pixel...`;
+
+    fetch(`/get_ndvi_anomaly_timeseries/?lat=${lat}&lon=${lon}&start_date=${start}&end_date=${end}`)
+        .then(res => res.json())
+        .then(data => {
+            const dates = data.data.map(d => d.date);
+            const ndvi = data.data.map(d => d.ndvi ?? 0);
+            const baseline = data.data.map(d => d.baseline ?? 0);
+            const anomaly = data.data.map(d => d.anomaly ?? 0);
+            drawChart(dates, ndvi, baseline, anomaly);
+            status.innerHTML = `✅ Pixel loaded (${dates.length} points)`;
+        })
+        .catch(err => {
+            console.error(err);
+            status.innerHTML = "❌ Pixel time series failed";
+        });
+}
+
+// ---------------- PROVINCE TIMESERIES ----------------
+function loadPolygonTimeSeries(geometry, name) {
+    const start = document.getElementById("start_date").value;
+    const end = document.getElementById("end_date").value;
+    const status = document.getElementById("status");
+    status.innerHTML = `<span class="loading-spinner"></span> Loading ${name}...`;
+
+    fetch('/get_ndvi_zonal_timeseries/', {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ geometry, start_date: start, end_date: end })
+    })
+    .then(res => res.json())
+    .then(data => {
+        const dates = data.data.map(d => d.date);
+        const ndvi = data.data.map(d => d.ndvi ?? 0);
+        const baseline = data.data.map(d => d.baseline ?? 0);
+        const anomaly = data.data.map(d => d.anomaly ?? 0);
+        drawChart(dates, ndvi, baseline, anomaly);
+        status.innerHTML = `✅ ${name} loaded (${dates.length} points)`;
+    })
+    .catch(err => {
+        console.error(err);
+        status.innerHTML = "❌ Failed to load region data";
+    });
+}
+
+// ---------------- DRAW CHART ----------------
+function drawChart(labels, ndvi, baseline, anomaly) {
+    if (chart) chart.destroy();
+    chartDataStore = {labels, ndvi, baseline, anomaly};
+    chart = new Chart(document.getElementById("chart"), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                { label: 'NDVI', data: ndvi, borderColor: 'green', fill: false, tension: 0.2 },
+                { label: 'Baseline', data: baseline, borderColor: 'blue', borderDash: [5,5], fill: false, tension: 0.2 },
+                { label: 'Anomaly', data: anomaly, borderColor: 'red', fill: false, tension: 0.2 }
+            ]
+        },
+        options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top' } } }
+    });
+}
+
+// ---------------- EXPORT ----------------
+function exportCSV() {
+    if (!chartDataStore) return alert("No data to export");
+    let csv = "Date,NDVI,Baseline,Anomaly\n";
+    for (let i=0;i<chartDataStore.labels.length;i++){
+        csv += `${chartDataStore.labels[i]},${chartDataStore.ndvi[i]},${chartDataStore.baseline[i]},${chartDataStore.anomaly[i]}\n`;
+    }
+    const blob = new Blob([csv], {type:"text/csv"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "ndvi_timeseries.csv";
+    a.click();
+}
+
+function exportPNG() {
+    if (!chart) return alert("No chart to export");
+    const link = document.createElement('a');
+    link.href = chart.toBase64Image();
+    link.download = 'ndvi_chart.png';
+    link.click();
+}
+
+// ---------------- DRAW CUSTOM REGION ----------------
+function enableDrawing() {
+    const drawControl = new L.Control.Draw({
+        draw: { polygon: true, rectangle: true, circle: false, polyline: false, marker: false },
+        edit: { featureGroup: drawnItems, remove: true }
+    });
+    map.addControl(drawControl);
+
+    map.on('draw:created', (e) => {
+        drawnItems.clearLayers();
+        drawnItems.addLayer(e.layer);
+        const geom = e.layer.toGeoJSON().geometry;
+        loadPolygonTimeSeries(geom, "Custom region");
+        document.getElementById("infoText").innerHTML = "✏️ Custom region drawn";
+        // Remove draw control after drawing to avoid clutter (optional)
+        map.removeControl(drawControl);
+    });
+}
+
+// ---------------- RELOAD ----------------
+function reloadAll() {
+    loadLayers();
+    if (chart) chart.destroy();
+    chartDataStore = null;
+    document.getElementById("status").innerHTML = "Reloading...";
+}
+
+// ---------------- INIT ----------------
+initMap();
+</script>
+
+</body>
+</html>
