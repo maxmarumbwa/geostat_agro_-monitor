@@ -3,705 +3,726 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>NDVI & VCI Dashboard - Zimbabwe | Advanced Multi-Region Analytics</title>
-
-    <!-- Leaflet CSS/JS -->
+    <meta name="description" content="Production-grade NDVI & VCI monitoring dashboard for Zimbabwe with multi-region analytics">
+    <title>AgriWatch | Zimbabwe Crop Health Dashboard</title>
+    
+    <!-- Leaflet Core -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
+    
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-
+    
     <!-- Leaflet Draw -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-
+    
     <style>
+        /* ===== GLOBAL DESIGN SYSTEM ===== */
         * {
+            margin: 0;
+            padding: 0;
             box-sizing: border-box;
         }
+
+        :root {
+            --primary: #2c7a47;
+            --primary-dark: #1e5a36;
+            --primary-light: #e8f5e9;
+            --secondary: #0f5b7a;
+            --gray-50: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-600: #475569;
+            --gray-800: #1e293b;
+            --danger: #dc2626;
+            --warning: #f59e0b;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --radius-lg: 1rem;
+            --radius-md: 0.75rem;
+        }
+
         body {
-            margin: 0;
-            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             background: #1e2a2e;
             overflow: hidden;
+            color: var(--gray-800);
         }
-        .dashboard-container {
+
+        /* Dashboard Layout */
+        .dashboard {
             display: flex;
             height: 100vh;
             width: 100%;
         }
-        /* Left Sidebar */
-        .sidebar-left {
+
+        /* Sidebars */
+        .sidebar {
             width: 420px;
-            background: #f4f6f8;
+            background: white;
             overflow-y: auto;
-            padding: 1rem;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 1rem;
+            padding: 1.25rem;
+            box-shadow: var(--shadow-md);
             z-index: 10;
+            backdrop-filter: blur(0px);
         }
-        /* Map area */
+
+        .sidebar-left {
+            border-right: 1px solid var(--gray-200);
+        }
+
+        .sidebar-right {
+            border-left: 1px solid var(--gray-200);
+            background: var(--gray-50);
+        }
+
+        /* Map Container */
         .map-container {
             flex: 1;
             position: relative;
             background: #2c3e2f;
         }
-        /* Right Sidebar - Advanced Analytics */
-        .sidebar-right {
-            width: 420px;
-            background: #f8fafc;
-            overflow-y: auto;
-            padding: 1rem;
-            box-shadow: -2px 0 10px rgba(0,0,0,0.08);
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            border-left: 1px solid #cbd5e1;
-            z-index: 10;
+
+        /* Scrollbar */
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
         }
-        .chart-container {
-            background: white;
-            border-radius: 16px;
-            padding: 12px;
-            margin-top: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        .sidebar::-webkit-scrollbar-track {
+            background: var(--gray-100);
         }
-        canvas {
-            max-height: 260px;
-            width: 100%;
+        .sidebar::-webkit-scrollbar-thumb {
+            background: var(--gray-600);
+            border-radius: 10px;
         }
-        button, .preset-btn {
-            background: #2c7a47;
-            border: none;
-            color: white;
-            padding: 6px 12px;
-            border-radius: 24px;
-            cursor: pointer;
-            margin: 4px 2px;
-            font-size: 0.85rem;
-            transition: 0.15s;
-            font-weight: 500;
-        }
-        button:hover {
-            background: #1e5a36;
-            transform: scale(0.98);
-        }
-        .mode-btn {
-            background: #6c757d;
-            flex: 1;
-        }
-        .mode-btn.active {
-            background: #2c7a47;
-        }
-        .status {
-            font-size: 0.8rem;
-            margin-top: 6px;
-            padding: 8px;
-            background: #e9ecef;
-            border-radius: 12px;
-        }
-        hr {
-            margin: 8px 0;
-            border-color: #cbd5e1;
-        }
-        .stats-panel {
-            background: #e2e8f0;
-            border-radius: 16px;
-            padding: 8px 12px;
-            font-size: 0.85rem;
-            border-left: 4px solid #2c7a47;
-        }
-        .stat-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 4px;
-        }
-        .opacity-slider {
+
+        /* Typography & Components */
+        h3 {
+            font-size: 1.35rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin: 8px 0;
+            gap: 0.5rem;
+        }
+        h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin: 0.5rem 0 0.25rem 0;
+        }
+        label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--gray-600);
+            margin-bottom: 0.25rem;
+            display: block;
+        }
+        button, .preset-btn, .mode-btn {
+            background: var(--primary);
+            border: none;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-sm);
+        }
+        button:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+        button:active {
+            transform: translateY(1px);
+        }
+        .mode-btn {
+            background: var(--gray-600);
+            flex: 1;
+            text-align: center;
+        }
+        .mode-btn.active {
+            background: var(--primary);
+            box-shadow: inset 0 0 0 2px white, 0 2px 4px rgba(0,0,0,0.1);
         }
         .preset-group {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
-            margin: 8px 0;
+            gap: 0.5rem;
+            margin: 0.5rem 0;
         }
-        .badge {
-            background: #2c7a47;
-            color: white;
-            border-radius: 30px;
-            padding: 2px 8px;
-            font-size: 0.7rem;
-        }
-        .progress-bar-container {
-            width: 100%;
-            background: #ddd;
-            border-radius: 10px;
-            margin: 8px 0;
-            overflow: hidden;
-        }
-        .progress-bar {
-            width: 0%;
-            height: 8px;
-            background: #2c7a47;
-            transition: width 0.2s;
-        }
-        .province-selector {
+        .preset-btn {
             background: white;
-            border-radius: 16px;
-            padding: 12px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            box-shadow: none;
+            padding: 0.35rem 0.85rem;
         }
-        select[multiple] {
+        .preset-btn:hover {
+            background: var(--primary-light);
+        }
+        input, select {
             width: 100%;
-            padding: 10px;
-            border-radius: 12px;
-            border: 1px solid #cbd5e1;
+            padding: 0.6rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--gray-200);
             background: white;
             font-size: 0.85rem;
-            margin: 8px 0;
+            transition: 0.15s;
         }
-        .selected-badge {
-            display: inline-block;
-            background: #e2e8f0;
-            border-radius: 20px;
-            padding: 4px 8px;
-            font-size: 0.7rem;
-            margin: 2px;
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(44,122,71,0.2);
         }
-        .info-note {
+        .stats-panel {
+            background: var(--gray-100);
+            border-radius: var(--radius-lg);
+            padding: 0.9rem;
+            border-left: 4px solid var(--primary);
+            margin: 0.5rem 0;
+        }
+        .chart-container {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 1rem;
+            box-shadow: var(--shadow-sm);
+            margin: 0.5rem 0;
+        }
+        .status {
+            font-size: 0.75rem;
+            padding: 0.5rem;
+            background: var(--gray-100);
+            border-radius: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        .badge {
+            background: var(--primary);
+            color: white;
+            border-radius: 2rem;
+            padding: 0.2rem 0.6rem;
             font-size: 0.7rem;
-            color: #475569;
-            background: #f1f5f9;
-            padding: 6px;
-            border-radius: 12px;
-            text-align: center;
+            font-weight: 600;
+        }
+        .progress-bar-container {
+            background: var(--gray-200);
+            border-radius: 1rem;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+        .progress-bar {
+            height: 6px;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.2s;
         }
         .flex-between {
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
+        .info-note {
+            font-size: 0.7rem;
+            color: var(--gray-600);
+            background: var(--gray-100);
+            padding: 0.5rem;
+            border-radius: 0.75rem;
+            text-align: center;
+        }
         #map-legend {
             position: absolute;
             bottom: 20px;
             left: 10px;
-            background: rgba(255,255,255,0.95);
-            padding: 8px 12px;
-            border-radius: 12px;
-            font-size: 11px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(8px);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.75rem;
+            font-size: 0.7rem;
             z-index: 1000;
             pointer-events: none;
+            font-family: monospace;
         }
-        #map-legend i {
+        .toast-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--gray-800);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+            box-shadow: var(--shadow-md);
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        select[multiple] {
+            min-height: 180px;
+        }
+        hr {
+            margin: 0.75rem 0;
+            border-color: var(--gray-200);
+        }
+        @media (max-width: 1000px) {
+            .sidebar { width: 320px; }
+        }
+        @media (max-width: 780px) {
+            .dashboard { flex-direction: column; }
+            .sidebar { width: 100%; max-height: 40vh; }
+            .map-container { min-height: 50vh; }
+        }
+        .loading-spinner {
             display: inline-block;
-            width: 16px;
-            height: 16px;
-            margin-right: 5px;
-            vertical-align: middle;
-            border-radius: 3px;
-        }
-        .compare-chart-wrapper {
-            margin-top: 10px;
-        }
-        .legend-color {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border-radius: 4px;
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--gray-200);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
             margin-right: 6px;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-<div class="dashboard-container">
-    <!-- LEFT SIDEBAR (Original) -->
-    <div class="sidebar-left">
-        <h3>🌿 NDVI & VCI <span style="font-size:0.7rem;">Zimbabwe</span></h3>
+<div class="dashboard">
+    <!-- LEFT SIDEBAR -->
+    <div class="sidebar sidebar-left">
+        <h3>🌾 AgriWatch <span style="font-size:0.7rem; font-weight:normal;">Zimbabwe</span></h3>
         <div>
-            <label>⏩ Date Presets</label>
+            <label>📅 Quick presets</label>
             <div class="preset-group">
-                <button class="preset-btn" data-preset="3m">📆 Last 3 Months</button>
-                <button class="preset-btn" data-preset="6m">📆 Last 6 Months</button>
-                <button class="preset-btn" data-preset="12m">📆 Last Year</button>
-                <button class="preset-btn" data-preset="2024">🌾 2024 Season</button>
+                <button class="preset-btn" data-preset="3m">Last 3 months</button>
+                <button class="preset-btn" data-preset="6m">Last 6 months</button>
+                <button class="preset-btn" data-preset="12m">Last year</button>
+                <button class="preset-btn" data-preset="2024">2024 season</button>
             </div>
         </div>
         <hr>
-        <label>🗺️ Map Date Range:</label>
-        <input type="date" id="mapStartDate" value="2024-01-01" style="width:100%; margin-bottom:5px">
-        <input type="date" id="mapEndDate" value="2024-01-16" style="width:100%">
-        <button id="reloadBtn" style="margin-top:6px;">⟳ Reload Map Layer</button>
+        <label>🗺️ Map tile range (16-day composite)</label>
+        <input type="date" id="mapStartDate" value="2024-01-01">
+        <input type="date" id="mapEndDate" value="2024-01-16">
+        <button id="reloadBtn">⟳ Reload map layer</button>
+        <div class="opacity-slider" style="margin-top: 8px;">
+            <span>🎨 Opacity</span>
+            <input type="range" id="opacitySlider" min="0" max="100" value="85">
+            <span id="opacityValue">85%</span>
+        </div>
         <hr>
         <div>
-            <h4>🎞️ Animation (Preload Tiles)</h4>
-            <input type="date" id="animStart" value="2024-01-01" style="width:100%">
-            <input type="date" id="animEnd" value="2024-06-01" style="width:100%; margin-top:4px">
-            <input type="number" id="animSpeed" value="1200" min="300" style="width:100%; margin:5px 0">
-            <select id="animLayer" style="width:100%; margin-bottom:6px;">
+            <h4>🎞️ Time‑lapse animation</h4>
+            <input type="date" id="animStart" value="2024-01-01">
+            <input type="date" id="animEnd" value="2024-06-01">
+            <select id="animLayer">
                 <option value="NDVI">NDVI</option><option value="Baseline">Baseline</option>
                 <option value="Anomaly">Anomaly</option><option value="VCI">VCI</option>
             </select>
-            <div style="display:flex; gap:8px;">
-                <button id="startAnimationBtn">▶️ Preload & Animate</button>
+            <div style="display:flex; gap:8px; margin:8px 0;">
+                <button id="startAnimationBtn">▶️ Animate</button>
                 <button id="stopAnimationBtn">⏹ Stop</button>
             </div>
             <div id="preloadProgressContainer" class="progress-bar-container" style="display:none;"><div class="progress-bar" id="preloadProgressBar"></div></div>
-            <div id="preloadStatus" class="preload-status" style="display:none;"></div>
             <div id="frameControl" style="display:none; margin-top:6px;">
                 <div class="flex-between"><span>Frame <span id="currentFrameIdx">0</span>/<span id="totalFrames">0</span></span><span id="frameDateLabel">—</span></div>
                 <input type="range" id="frameSlider" min="0" max="0" step="1" style="width:100%">
             </div>
-            <div><strong>Current window:</strong> <span id="animCurrentDate">—</span></div>
         </div>
         <hr>
-        <label>📊 Time Series Range (for chart & stats)</label>
-        <input type="date" id="start_date" value="2024-01-01" style="width:100%">
-        <input type="date" id="end_date" value="2024-06-01" style="width:100%; margin-top:5px">
-        <div class="opacity-slider">
-            <span>🎨 Layer Opacity</span>
-            <input type="range" id="opacitySlider" min="0" max="100" value="100">
-            <span id="opacityValue">100%</span>
+        <label>📈 Time‑series range (Chart & stats)</label>
+        <input type="date" id="start_date" value="2024-01-01">
+        <input type="date" id="end_date" value="2024-06-01">
+        <div class="mode-toggle" style="display: flex; gap:8px; margin:8px 0;">
+            <button id="pixelBtn" class="mode-btn">📍 Pixel mode</button>
+            <button id="polyBtn" class="mode-btn active">🗺️ Province mode</button>
         </div>
-        <hr>
-        <h4>🗺️ Map Layers</h4>
-        <div style="display: flex; flex-wrap: wrap; gap: 5px;">
-            <button onclick="showLayer('NDVI')">🌱 NDVI</button>
-            <button onclick="showLayer('Baseline')">📊 Baseline</button>
-            <button onclick="showLayer('Anomaly')">⚠️ Anomaly</button>
-            <button onclick="showLayer('VCI')">💧 VCI</button>
-        </div>
-        <hr>
-        <div class="mode-toggle" style="display: flex; gap:8px;">
-            <button id="pixelBtn" class="mode-btn">📍 Pixel Mode</button>
-            <button id="polyBtn" class="mode-btn active">🗺 Province Mode</button>
-        </div>
-        <button onclick="enableDrawing()">✏️ Draw Custom Region</button>
-        <div id="infoText" class="info-note" style="margin-top:6px;">Click a province</div>
+        <button id="drawBtn">✏️ Draw custom region</button>
+        <div id="infoText" class="info-note">Click a province on map</div>
         <div class="stats-panel" id="statsPanel">
-            <h4 style="margin:0 0 6px 0;">📈 Quick Stats</h4>
+            <h4 style="margin:0 0 6px 0;">📊 Current stats</h4>
             <div id="statsContent">No selection</div>
         </div>
         <div class="chart-container">
-            <div id="chart-legend">
-                <div><span style="background:green; display:inline-block; width:14px;height:14px;"></span> NDVI</div>
-                <div><span style="border-top:2px dashed blue; width:14px; display:inline-block;"></span> Baseline</div>
-                <div><span style="background:red;"></span> Anomaly</div>
-                <div id="vciLegendItem" style="display:none;"><span style="background:#9b59b6;"></span> VCI (%)</div>
-            </div>
-            <div class="smooth-toggle" style="display:flex; gap:12px; margin:6px 0;">
-                <label><input type="checkbox" id="smoothToggle"> 📉 Smooth NDVI</label>
-                <label><input type="checkbox" id="vciToggle"> 📈 Show VCI</label>
-            </div>
-            <canvas id="chart"></canvas>
-            <div class="export-buttons" style="margin-top:8px; display:flex; gap:8px;">
-                <button onclick="exportCSV()">💾 Export CSV</button>
-                <button onclick="exportPNG()">🖼 Export PNG</button>
-            </div>
-            <div id="status" class="status">Ready</div>
+            <div class="flex-between"><span>🌿 Vegetation trends</span><div><label><input type="checkbox" id="smoothToggle"> Smooth</label><label style="margin-left:8px;"><input type="checkbox" id="vciToggle"> Show VCI</label></div></div>
+            <canvas id="chart" style="max-height: 240px;"></canvas>
+            <div style="display:flex; gap:8px; margin-top:8px;"><button id="exportCSVBtn">📎 Export CSV</button><button id="exportPNGBtn">🖼 Export PNG</button></div>
+            <div id="status" class="status">✅ Ready</div>
         </div>
     </div>
 
     <!-- MAP AREA -->
-    <div id="map" class="map-container">
-        <div id="map-legend"></div>
-    </div>
+    <div id="map" class="map-container"><div id="map-legend"></div></div>
 
-    <!-- RIGHT SIDEBAR: ADVANCED ANALYTICS (Multi-Region Comparison) -->
-    <div class="sidebar-right">
-        <h3>📊 Advanced Analytics <span style="font-size:0.75rem; background:#e9ecef; padding:2px 8px; border-radius:20px;">multi-region</span></h3>
-        <div class="province-selector">
-            <div class="flex-between">
-                <label><strong>📍 Compare up to 3 provinces</strong></label>
-                <span id="selectedCountBadge" class="badge">0/3</span>
-            </div>
-            <select multiple id="multiProvinceSelect" size="8" style="width:100%;">
-                <!-- options will be populated from GeoJSON -->
-            </select>
-            <div class="info-note" style="margin: 6px 0;">💡 Ctrl+Click (or Cmd+Click) to select multiple</div>
-            <div style="display: flex; gap: 10px; margin-top: 8px;">
-                <button id="compareBtn" style="flex:1; background:#2c7a47;">📈 Compare Selected</button>
-                <button id="clearCompareBtn" style="flex:1; background:#6c757d;">🗑 Clear</button>
-            </div>
+    <!-- RIGHT SIDEBAR: COMPARISON -->
+    <div class="sidebar sidebar-right">
+        <h3>📊 Multi‑region <span class="badge">Beta</span></h3>
+        <div>
+            <div class="flex-between"><label><strong>Compare provinces (max 3)</strong></label><span id="selectedCountBadge" class="badge">0/3</span></div>
+            <select multiple id="multiProvinceSelect" size="7"></select>
+            <div class="info-note">💡 Ctrl/Cmd + click to select multiple</div>
+            <div style="display:flex; gap:8px; margin-top:8px;"><button id="compareBtn">📈 Compare</button><button id="clearCompareBtn">🗑 Clear</button></div>
         </div>
-
-        <div class="chart-container compare-chart-wrapper">
-            <div class="flex-between">
-                <h4 style="margin:0 0 6px 0;">📉 NDVI Comparison</h4>
-                <label style="font-size:0.7rem;"><input type="checkbox" id="compareVciToggle"> Show VCI (%)</label>
-            </div>
-            <canvas id="compareChart" style="max-height: 280px;"></canvas>
-            <div style="margin-top: 8px; display:flex; justify-content:space-between;">
-                <button id="exportCompareCSVBtn" style="background:#0f5b7a;">📎 Export Comparison CSV</button>
-                <span id="compareStatus" class="status" style="margin:0; padding:4px 8px;">Ready</span>
-            </div>
+        <div class="chart-container">
+            <div class="flex-between"><h4>📉 NDVI / VCI comparison</h4><label><input type="checkbox" id="compareVciToggle"> Show VCI %</label></div>
+            <canvas id="compareChart" style="max-height: 260px;"></canvas>
+            <button id="exportCompareCSVBtn" style="margin-top:8px; background:var(--secondary);">📎 Export comparison CSV</button>
+            <div id="compareStatus" class="status" style="margin-top:6px;">Select regions → Compare</div>
         </div>
-
-        <div class="stats-panel" style="background:#f1f5f9;">
-            <h4 style="margin:0 0 4px 0;">📌 Comparison Insights</h4>
-            <div id="compareInsights">Select provinces and click "Compare Selected"</div>
-        </div>
+        <div class="stats-panel"><h4>📌 Insights</h4><div id="compareInsights">—</div></div>
     </div>
 </div>
 
 <script>
-    // ---------- GLOBAL VARIABLES ----------
-    let map, layers = {}, activeLayer;
-    let chart = null;
-    let chartDataStore = null;
-    let mode = "polygon";
-    let currentPoint = null;
-    let currentProvince = null;
-    let geoLayer = null;
-    let animationInterval = null;
-    let drawnItems = new L.FeatureGroup();
-    let animationFramesList = [];
-    let currentAnimFrameIndex = 0;
-    let isSmoothing = false;
-    let showVCI = false;
-    let tileCache = new Map();
-    let preloadedLayers = [];
-    let isPreloading = false;
-    let animationActive = false;
-    
-    // Multi-region data structures
-    let provinceGeometries = new Map();     // name -> geometry (GeoJSON)
-    let provinceNamesList = [];
-    let compareChartInstance = null;
-    let currentCompareData = null;           // store for export
+    // ======================= PRODUCTION-GRADE DASHBOARD =======================
+    (function(){
+        // ---------- CONFIGURATION ----------
+        const CONFIG = {
+            API_BASE: '',  // relative to current origin
+            MAX_COMPARE_REGIONS: 3,
+            ANIMATION_MAX_FRAMES: 24,
+            REQUEST_TIMEOUT_MS: 15000,
+            ZIM_BOUNDS: L.latLngBounds(L.latLng(-23.5, 25.3), L.latLng(-15.6, 32.0))
+        };
 
-    const zimBounds = L.latLngBounds(L.latLng(-23.5, 25.3), L.latLng(-15.6, 32.0));
-    function addDays(dateStr, days) { let d = new Date(dateStr); d.setDate(d.getDate()+days); return d.toISOString().split('T')[0]; }
+        // ---------- GLOBAL STATE (encapsulated) ----------
+        let state = {
+            map: null,
+            activeLayer: null,
+            layers: {},
+            currentMode: 'polygon',   // 'polygon' or 'pixel'
+            currentProvince: null,
+            currentPoint: null,
+            geoJsonLayer: null,
+            drawnItems: new L.FeatureGroup(),
+            chart: null,
+            compareChart: null,
+            chartDataStore: null,
+            isSmoothing: false,
+            showVCI: false,
+            animationInterval: null,
+            animationActive: false,
+            preloadedFrames: [],
+            animationFrameDates: [],
+            provinceGeometries: new Map(),
+            provinceList: [],
+            compareDataCache: null,
+            abortControllers: new Set()
+        };
 
-    // ---------- DATE PRESETS ----------
-    function setDatePreset(preset) {
-        let start = new Date(), end = new Date();
-        switch(preset) {
-            case '3m': start.setMonth(start.getMonth()-3); break;
-            case '6m': start.setMonth(start.getMonth()-6); break;
-            case '12m': start.setFullYear(start.getFullYear()-1); break;
-            case '2024': start = new Date('2024-01-01'); end = new Date('2024-12-31'); break;
-            default: return;
+        // Helper: toast notification
+        function showToast(message, isError = false) {
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification';
+            toast.style.background = isError ? '#b91c1c' : '#2c7a47';
+            toast.innerText = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
         }
-        if(end > new Date()) end = new Date();
-        document.getElementById('start_date').value = start.toISOString().split('T')[0];
-        document.getElementById('end_date').value = end.toISOString().split('T')[0];
-        document.getElementById('animStart').value = start.toISOString().split('T')[0];
-        document.getElementById('animEnd').value = end.toISOString().split('T')[0];
-        if (mode === "pixel" && currentPoint) loadPixelTimeSeries(currentPoint.lat, currentPoint.lon);
-        else if (mode === "polygon" && currentProvince && geoLayer) {
-            geoLayer.eachLayer(layer => { if(layer.feature && layer.feature.properties.ADM2_EN === currentProvince) loadPolygonTimeSeries(layer.feature.geometry, currentProvince); });
+
+        // Abort controller management
+        function abortPendingRequests() {
+            state.abortControllers.forEach(ctrl => ctrl.abort());
+            state.abortControllers.clear();
         }
-    }
-    document.querySelectorAll('.preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => setDatePreset(btn.dataset.preset));
-    });
 
-    // Opacity
-    const opacitySlider = document.getElementById('opacitySlider');
-    opacitySlider.addEventListener('input', (e) => {
-        let val = e.target.value;
-        document.getElementById('opacityValue').innerText = val+'%';
-        if (activeLayer && activeLayer.setOpacity) activeLayer.setOpacity(val/100);
-    });
-
-    // Smoothing & VCI for main chart
-    function computeMovingAverage(arr, window=3) {
-        if (arr.length < window) return [...arr];
-        let smoothed = [];
-        for (let i=0; i<arr.length; i++) {
-            let left = Math.max(0, i - Math.floor(window/2));
-            let right = Math.min(arr.length-1, i + Math.floor(window/2));
-            let sum = 0, count = 0;
-            for (let j=left; j<=right; j++) { sum += arr[j]; count++; }
-            smoothed.push(sum/count);
-        }
-        return smoothed;
-    }
-    function redrawChartWithOptions() {
-        if (!chartDataStore) return;
-        let ndviData = chartDataStore.ndvi_raw;
-        let smoothed = isSmoothing ? computeMovingAverage(ndviData, 3) : ndviData;
-        let datasets = [
-            { label: 'NDVI', data: smoothed, borderColor: 'green', fill: false, tension: 0.2, pointRadius: 2, yAxisID: 'y' },
-            { label: 'Baseline', data: chartDataStore.baseline, borderColor: 'blue', borderDash: [5,5], fill: false, tension: 0.2, pointRadius: 1, yAxisID: 'y' },
-            { label: 'Anomaly', data: chartDataStore.anomaly, borderColor: 'red', fill: false, tension: 0.2, pointRadius: 1, yAxisID: 'y' }
-        ];
-        if (showVCI && chartDataStore.vci_raw && chartDataStore.vci_raw.length) {
-            datasets.push({ label: 'VCI (%)', data: chartDataStore.vci_raw, borderColor: '#9b59b6', borderWidth: 2, fill: false, tension: 0.2, pointRadius: 2, yAxisID: 'y1' });
-            document.getElementById('vciLegendItem').style.display = 'flex';
-        } else { document.getElementById('vciLegendItem').style.display = 'none'; }
-        if (chart) { chart.data.datasets = datasets; chart.update(); }
-        else {
-            const ctx = document.getElementById("chart").getContext('2d');
-            chart = new Chart(ctx, { type: 'line', data: { labels: chartDataStore.labels, datasets }, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top' } }, scales: { y: { title: { display: true, text: 'NDVI / Anomaly' } }, y1: { position: 'right', title: { display: true, text: 'VCI (%)' }, grid: { drawOnChartArea: false } } } } });
-        }
-    }
-    document.getElementById('smoothToggle').addEventListener('change', (e) => { isSmoothing = e.target.checked; redrawChartWithOptions(); });
-    document.getElementById('vciToggle').addEventListener('change', (e) => { showVCI = e.target.checked; redrawChartWithOptions(); });
-
-    // Data loading (single)
-    async function loadPixelTimeSeries(lat, lon) {
-        const start = document.getElementById("start_date").value, end = document.getElementById("end_date").value;
-        document.getElementById("status").innerHTML = `<span class="loading-spinner"></span> Loading pixel...`;
-        try {
-            let res = await fetch(`/get_ndvi_anomaly_timeseries/?lat=${lat}&lon=${lon}&start_date=${start}&end_date=${end}`);
-            let data = await res.json();
-            const dates = data.data.map(d => d.date), ndvi = data.data.map(d => d.ndvi ?? 0), baseline = data.data.map(d => d.baseline ?? 0), anomaly = data.data.map(d => d.anomaly ?? 0);
-            let vci = data.data.map(d => d.vci !== undefined ? d.vci : null);
-            if (vci.every(v => v === null)) { let minN = Math.min(...ndvi, -0.1), maxN = Math.max(...ndvi, 0.7); vci = ndvi.map(n => ((n - minN) / (maxN - minN)) * 100); }
-            chartDataStore = { labels: dates, ndvi_raw: ndvi, baseline, anomaly, vci_raw: vci };
-            redrawChartWithOptions();
-            updateQuickStats(`Pixel (${lat.toFixed(2)},${lon.toFixed(2)})`, ndvi, baseline, anomaly, vci, dates);
-            document.getElementById("status").innerHTML = `✅ Pixel loaded`;
-        } catch(e) { document.getElementById("status").innerHTML = "❌ Pixel error"; }
-    }
-
-    async function loadPolygonTimeSeries(geometry, name) {
-        const start = document.getElementById("start_date").value, end = document.getElementById("end_date").value;
-        document.getElementById("status").innerHTML = `<span class="loading-spinner"></span> Loading ${name}...`;
-        try {
-            let res = await fetch('/get_ndvi_zonal_timeseries/', { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ geometry, start_date: start, end_date: end }) });
-            let data = await res.json();
-            const dates = data.data.map(d => d.date), ndvi = data.data.map(d => d.ndvi ?? 0), baseline = data.data.map(d => d.baseline ?? 0), anomaly = data.data.map(d => d.anomaly ?? 0);
-            let vci = data.data.map(d => d.vci !== undefined ? d.vci : null);
-            if (vci.every(v => v === null)) { let minN = Math.min(...ndvi, -0.1), maxN = Math.max(...ndvi, 0.7); vci = ndvi.map(n => ((n - minN) / (maxN - minN)) * 100); }
-            chartDataStore = { labels: dates, ndvi_raw: ndvi, baseline, anomaly, vci_raw: vci };
-            redrawChartWithOptions();
-            updateQuickStats(name, ndvi, baseline, anomaly, vci, dates);
-            document.getElementById("status").innerHTML = `✅ ${name} loaded`;
-        } catch(e) { document.getElementById("status").innerHTML = "❌ Region error"; }
-    }
-
-    function updateQuickStats(regionName, ndviArr, baselineArr, anomalyArr, vciArr, datesArr) {
-        if (!ndviArr.length) { document.getElementById('statsContent').innerHTML = "No data"; return; }
-        const latestNDVI = ndviArr[ndviArr.length-1], latestAnomaly = anomalyArr[anomalyArr.length-1], meanNDVI = ndviArr.reduce((a,b)=>a+b,0)/ndviArr.length;
-        let healthStatus = "🌿 Normal";
-        if (latestAnomaly < -0.15) healthStatus = "⚠️ Severe Drought";
-        else if (latestAnomaly < -0.07) healthStatus = "🍂 Moderate Dryness";
-        else if (latestAnomaly > 0.1) healthStatus = "🌱 Lush";
-        let vciLine = (vciArr && vciArr.length) ? `<div class="stat-row"><span>💧 Latest VCI:</span><span><b>${vciArr[vciArr.length-1].toFixed(1)}%</b></span></div>` : "";
-        document.getElementById('statsContent').innerHTML = `<div class="stat-row"><strong>📍 ${regionName}</strong> <span>${healthStatus}</span></div><div class="stat-row"><span>🌿 Latest NDVI:</span><span><b>${latestNDVI.toFixed(3)}</b></span></div><div class="stat-row"><span>⚠️ Anomaly:</span><span><b>${latestAnomaly.toFixed(3)}</b></span></div><div class="stat-row"><span>📊 Mean NDVI:</span><span>${meanNDVI.toFixed(3)}</span></div>${vciLine}<div class="stat-row"><span>📅 Period:</span><span>${datesArr[0]} → ${datesArr[datesArr.length-1]}</span></div>`;
-    }
-
-    // Map legend
-    function updateMapLegend(layerName) {
-        const legendDiv = document.getElementById("map-legend");
-        if(layerName === "NDVI") legendDiv.innerHTML = `<b>🌱 NDVI</b><br><i style="background:#d73027;"></i> -0.2<br><i style="background:#fc8d59;"></i> 0.0<br><i style="background:#fee08b;"></i> 0.2<br><i style="background:#d9ef8b;"></i> 0.4<br><i style="background:#91cf60;"></i> 0.6<br><i style="background:#1a9850;"></i> 0.8+`;
-        else if(layerName === "Baseline") legendDiv.innerHTML = `<b>📊 Baseline</b><br><i style="background:#f7fbff;"></i> 0<br><i style="background:#c6dbef;"></i> 0.2<br><i style="background:#6baed6;"></i> 0.4<br><i style="background:#2171b5;"></i> 0.6<br><i style="background:#084594;"></i> 0.8+`;
-        else if(layerName === "Anomaly") legendDiv.innerHTML = `<b>⚠️ Anomaly</b><br><i style="background:#d73027;"></i> -0.5<br><i style="background:#fc8d59;"></i> -0.25<br><i style="background:#ffffbf;"></i> 0<br><i style="background:#91cf60;"></i> 0.25<br><i style="background:#1a9850;"></i> 0.5+`;
-        else if(layerName === "VCI") legendDiv.innerHTML = `<b>💧 VCI</b><br><i style="background:#8b0000;"></i> 0-15 Drought<br><i style="background:#ffa500;"></i> 30-40 Moderate<br><i style="background:#90ee90;"></i> 60-80 Healthy<br><i style="background:#008000;"></i> 80-100 Lush`;
-    }
-
-    // Tile functions
-    async function fetchTileUrl(layerName, startDate) {
-        const cacheKey = `${layerName}|${startDate}`;
-        if (tileCache.has(cacheKey)) return tileCache.get(cacheKey);
-        const endDate = addDays(startDate, 16);
-        try {
-            const response = await fetch(`/get_ndvi_layers_start_end/?start_date=${startDate}&end_date=${endDate}`);
-            const data = await response.json();
-            let url = (layerName === "NDVI") ? data.ndvi : (layerName === "Baseline") ? data.baseline : (layerName === "Anomaly") ? data.anomaly : data.vci;
-            if (url) tileCache.set(cacheKey, url);
-            return url;
-        } catch(e) { return null; }
-    }
-    function createTileLayer(url) { if(!url) return null; return L.tileLayer(url, { bounds: zimBounds, maxBounds: zimBounds, opacity: opacitySlider.value/100 }); }
-
-    // Animation preload (simplified but functional)
-    async function preloadAllFrames(frames, layerName, onProgress, onComplete) {
-        preloadedLayers = [];
-        for (let i=0; i<frames.length; i++) {
-            const url = await fetchTileUrl(layerName, frames[i]);
-            if (!url) { preloadedLayers.push(null); if(onProgress) onProgress(i+1,frames.length); continue; }
-            const tempLayer = createTileLayer(url);
-            if(tempLayer) {
-                tempLayer.setOpacity(0);
-                tempLayer.addTo(map);
-                await new Promise(resolve => { let done=false; tempLayer.on('load',()=>{if(!done){done=true;resolve();}}); tempLayer.on('tileerror',()=>{if(!done){done=true;resolve();}}); setTimeout(resolve,2000); });
-                map.removeLayer(tempLayer);
-                const finalLayer = createTileLayer(url);
-                finalLayer.setOpacity(opacitySlider.value/100);
-                preloadedLayers.push(finalLayer);
-            } else { preloadedLayers.push(null); }
-            if(onProgress) onProgress(i+1,frames.length);
-        }
-        if(onComplete) onComplete();
-    }
-    function getDatesBetweenForAnim(startDate, endDate) { let dates=[]; let current=new Date(startDate); const end=new Date(endDate); while(current<=end){ dates.push(current.toISOString().split("T")[0]); current.setDate(current.getDate()+16); } return dates; }
-    function switchToPreloadedFrame(index) {
-        if(!preloadedLayers.length || index>=preloadedLayers.length) return;
-        const newLayer = preloadedLayers[index];
-        if(!newLayer) return;
-        if(activeLayer) map.removeLayer(activeLayer);
-        activeLayer = newLayer;
-        activeLayer.addTo(map);
-        const frameStart = animationFramesList[index];
-        document.getElementById('mapStartDate').value = frameStart;
-        document.getElementById('mapEndDate').value = addDays(frameStart,16);
-        document.getElementById('animCurrentDate').innerHTML = `${frameStart} → ${addDays(frameStart,16)}`;
-        currentAnimFrameIndex = index;
-        document.getElementById('frameSlider').value = index;
-        document.getElementById('currentFrameIdx').innerText = index+1;
-        updateMapLegend(document.getElementById("animLayer").value);
-    }
-    async function startAnimationWithPreload() {
-        if(animationInterval) clearInterval(animationInterval);
-        if(isPreloading) { document.getElementById("status").innerHTML="⏳ Already preloading..."; return; }
-        const start=document.getElementById("animStart").value, end=document.getElementById("animEnd").value, speed=parseInt(document.getElementById("animSpeed").value), layerName=document.getElementById("animLayer").value;
-        animationFramesList = getDatesBetweenForAnim(start,end);
-        if(!animationFramesList.length) return alert("No frames");
-        const progDiv=document.getElementById('preloadProgressContainer'), progBar=document.getElementById('preloadProgressBar'), statusDiv=document.getElementById('preloadStatus');
-        progDiv.style.display='block'; statusDiv.style.display='block';
-        isPreloading=true; document.getElementById("startAnimationBtn").disabled=true;
-        await preloadAllFrames(animationFramesList, layerName, (loaded,total)=>{ let pct=(loaded/total)*100; progBar.style.width=pct+'%'; statusDiv.innerHTML=`Preloading ${loaded}/${total} (${Math.round(pct)}%)`; }, ()=>{
-            isPreloading=false; progDiv.style.display='none'; statusDiv.style.display='none'; document.getElementById("startAnimationBtn").disabled=false;
-            currentAnimFrameIndex=0; switchToPreloadedFrame(0); animationActive=true;
-            animationInterval = setInterval(()=>{ if(animationActive) switchToPreloadedFrame((currentAnimFrameIndex+1)%animationFramesList.length); }, speed);
-        });
-    }
-    function stopAnimationPreload() { if(animationInterval){clearInterval(animationInterval);animationInterval=null;} animationActive=false; }
-    document.getElementById("startAnimationBtn").onclick = startAnimationWithPreload;
-    document.getElementById("stopAnimationBtn").onclick = stopAnimationPreload;
-    document.getElementById("frameSlider").addEventListener('input', (e)=>{ if(animationInterval){clearInterval(animationInterval);animationInterval=null;animationActive=false;} switchToPreloadedFrame(parseInt(e.target.value)); });
-
-    // Layer loading
-    function loadLayers() {
-        const startDate=document.getElementById("mapStartDate").value, endDate=document.getElementById("mapEndDate").value;
-        fetch(`/get_ndvi_layers_start_end/?start_date=${startDate}&end_date=${endDate}`).then(res=>res.json()).then(data=>{
-            layers = { "NDVI": L.tileLayer(data.ndvi,{bounds:zimBounds,opacity:opacitySlider.value/100}), "Baseline": L.tileLayer(data.baseline,{bounds:zimBounds,opacity:opacitySlider.value/100}), "Anomaly": L.tileLayer(data.anomaly,{bounds:zimBounds,opacity:opacitySlider.value/100}), "VCI": L.tileLayer(data.vci,{bounds:zimBounds,opacity:opacitySlider.value/100}) };
-            showLayer("NDVI"); map.fitBounds(zimBounds);
-        }).catch(err=>console.error(err));
-    }
-    function showLayer(name) { if(activeLayer) map.removeLayer(activeLayer); activeLayer=layers[name]; if(activeLayer){ activeLayer.addTo(map); activeLayer.setOpacity(opacitySlider.value/100); updateMapLegend(name); } }
-    function reloadAll() { loadLayers(); if(chart) chart.destroy(); chartDataStore=null; document.getElementById("statsContent").innerHTML="No selection"; }
-    document.getElementById("reloadBtn").onclick = reloadAll;
-
-    // GeoJSON & province list for multi-select
-    function loadGeoJSON() {
-        fetch('/static/geojson/zimadm2.geojson')
-            .then(res => res.json())
-            .then(data => {
-                geoLayer = L.geoJSON(data, { style: { color: 'yellow', weight: 2 }, onEachFeature: (feature, layer) => {
-                    const name = feature.properties.ADM2_EN;
-                    provinceGeometries.set(name, feature.geometry);
-                    if(!provinceNamesList.includes(name)) provinceNamesList.push(name);
-                    layer.bindTooltip(name);
-                    layer.on('click', () => { if(mode !== "polygon") return; currentProvince = name; document.getElementById("infoText").innerHTML = `🗺 ${name}`; loadPolygonTimeSeries(feature.geometry, name); });
-                } }).addTo(map);
-                // Populate multi-select dropdown
-                const selectEl = document.getElementById("multiProvinceSelect");
-                selectEl.innerHTML = "";
-                provinceNamesList.sort().forEach(p => { let opt = document.createElement("option"); opt.value = p; opt.textContent = p; selectEl.appendChild(opt); });
-            }).catch(err => console.error("GeoJSON error", err));
-    }
-
-    // MULTI-REGION COMPARISON LOGIC
-    async function loadMultiRegionComparison(provinceNames) {
-        if(provinceNames.length === 0) { document.getElementById("compareStatus").innerHTML = "⚠️ Select provinces"; return; }
-        if(provinceNames.length > 3) { alert("Maximum 3 provinces for comparison"); return; }
-        const start = document.getElementById("start_date").value, end = document.getElementById("end_date").value;
-        document.getElementById("compareStatus").innerHTML = `<span class="loading-spinner"></span> Loading ${provinceNames.length} regions...`;
-        let fetchPromises = provinceNames.map(async (name) => {
-            let geom = provinceGeometries.get(name);
-            if(!geom) return null;
-            let res = await fetch('/get_ndvi_zonal_timeseries/', { method: "POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ geometry: geom, start_date: start, end_date: end }) });
-            let data = await res.json();
-            return { name, dates: data.data.map(d=>d.date), ndvi: data.data.map(d=>d.ndvi ?? 0), vci: data.data.map(d=>d.vci !== undefined ? d.vci : null) };
-        });
-        let results = await Promise.all(fetchPromises);
-        results = results.filter(r => r && r.ndvi.length > 0);
-        if(results.length === 0) { document.getElementById("compareStatus").innerHTML = "❌ No data"; return; }
-        // use first region's dates as reference
-        const labels = results[0].dates;
-        const showVciCompare = document.getElementById("compareVciToggle").checked;
-        let datasets = [];
-        let colors = ["#2c7a47", "#e67e22", "#2980b9", "#8e44ad"];
-        results.forEach((reg, idx) => {
-            let dataField = showVciCompare ? reg.vci.map(v => v !== null ? v : null) : reg.ndvi;
-            if(showVciCompare && (!reg.vci || reg.vci.every(v=>v===null))) {
-                // compute dummy VCI if missing
-                let minN = Math.min(...reg.ndvi, -0.1), maxN = Math.max(...reg.ndvi, 0.7);
-                dataField = reg.ndvi.map(n => ((n - minN) / (maxN - minN)) * 100);
+        async function fetchWithTimeout(url, options = {}) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS);
+            state.abortControllers.add(controller);
+            try {
+                const response = await fetch(url, { ...options, signal: controller.signal });
+                clearTimeout(timeoutId);
+                state.abortControllers.delete(controller);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (err) {
+                clearTimeout(timeoutId);
+                state.abortControllers.delete(controller);
+                throw err;
             }
-            datasets.push({ label: `${reg.name} ${showVciCompare ? '(VCI%)' : '(NDVI)'}`, data: dataField, borderColor: colors[idx % colors.length], backgroundColor: 'transparent', borderWidth: 2, tension: 0.2, fill: false });
-        });
-        if(compareChartInstance) compareChartInstance.destroy();
-        const ctx = document.getElementById("compareChart").getContext('2d');
-        compareChartInstance = new Chart(ctx, { type: 'line', data: { labels, datasets }, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top' } }, scales: { y: { title: { display: true, text: showVciCompare ? 'VCI (%)' : 'NDVI Value' } } } } });
-        document.getElementById("compareStatus").innerHTML = `✅ ${results.length} regions compared`;
-        currentCompareData = { labels, datasets: results.map(r => ({ name: r.name, ndvi: r.ndvi, vci: r.vci })) };
-        let insightHtml = results.map(r => `🔹 ${r.name}: latest NDVI ${r.ndvi[r.ndvi.length-1]?.toFixed(3)}`).join('<br>');
-        document.getElementById("compareInsights").innerHTML = insightHtml || "Comparison loaded";
-    }
-
-    document.getElementById("compareBtn").onclick = () => {
-        let select = document.getElementById("multiProvinceSelect");
-        let selected = Array.from(select.selectedOptions).map(opt => opt.value);
-        if(selected.length > 3) { alert("Please select max 3 provinces"); return; }
-        if(selected.length === 0) { alert("Select at least one province"); return; }
-        loadMultiRegionComparison(selected);
-    };
-    document.getElementById("clearCompareBtn").onclick = () => {
-        let select = document.getElementById("multiProvinceSelect");
-        Array.from(select.options).forEach(opt => opt.selected = false);
-        if(compareChartInstance) { compareChartInstance.destroy(); compareChartInstance = null; }
-        document.getElementById("compareStatus").innerHTML = "Cleared";
-        document.getElementById("compareInsights").innerHTML = "Select provinces and compare";
-        currentCompareData = null;
-    };
-    document.getElementById("compareVciToggle").addEventListener("change", () => {
-        if(currentCompareData && compareChartInstance) {
-            let selected = Array.from(document.getElementById("multiProvinceSelect").selectedOptions).map(o=>o.value);
-            if(selected.length) loadMultiRegionComparison(selected);
         }
-    });
-    document.getElementById("exportCompareCSVBtn").onclick = () => {
-        if(!currentCompareData || !currentCompareData.datasets) { alert("No comparison data to export"); return; }
-        let csv = "Date," + currentCompareData.datasets.map(d => d.name + "_NDVI").join(",") + "," + currentCompareData.datasets.map(d => d.name + "_VCI").join(",") + "\n";
-        for(let i=0; i<currentCompareData.labels.length; i++) {
-            let row = currentCompareData.labels[i];
-            for(let ds of currentCompareData.datasets) { row += `,${ds.ndvi[i]?.toFixed(4) || ''}`; }
-            for(let ds of currentCompareData.datasets) { let v = ds.vci && ds.vci[i] !== null ? ds.vci[i].toFixed(2) : ''; row += `,${v}`; }
-            csv += row + "\n";
+
+        // ---------- HELPER: date utils ----------
+        function addDays(dateStr, days) { let d = new Date(dateStr); d.setDate(d.getDate()+days); return d.toISOString().split('T')[0]; }
+        function getDatesBetweenStep(startDate, endDate, stepDays=16) {
+            let dates = [];
+            let current = new Date(startDate);
+            const end = new Date(endDate);
+            while (current <= end) {
+                dates.push(current.toISOString().split('T')[0]);
+                current.setDate(current.getDate() + stepDays);
+            }
+            return dates.slice(0, CONFIG.ANIMATION_MAX_FRAMES);
         }
-        let a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download = "multi_region_comparison.csv"; a.click();
-    };
 
-    // Drawing and utilities
-    function enableDrawing() {
-        const drawControl = new L.Control.Draw({ draw: { polygon: true, rectangle: true, circle: false, polyline: false, marker: false }, edit: { featureGroup: drawnItems, remove: true } });
-        map.addControl(drawControl);
-        map.once('draw:created', (e) => { drawnItems.clearLayers(); drawnItems.addLayer(e.layer); const geom = e.layer.toGeoJSON().geometry; loadPolygonTimeSeries(geom, "Custom region"); document.getElementById("infoText").innerHTML = "✏️ Custom drawn"; map.removeControl(drawControl); });
-    }
-    function exportCSV() { if(!chartDataStore) return alert("No data"); let csv="Date,NDVI,Baseline,Anomaly,VCI\n"; for(let i=0;i<chartDataStore.labels.length;i++) csv+=`${chartDataStore.labels[i]},${chartDataStore.ndvi_raw[i]},${chartDataStore.baseline[i]},${chartDataStore.anomaly[i]},${chartDataStore.vci_raw?.[i]??""}\n`; let a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="ndvi_timeseries.csv"; a.click(); }
-    function exportPNG() { if(!chart) return alert("No chart"); let a=document.createElement("a"); a.href=chart.toBase64Image(); a.download="ndvi_chart.png"; a.click(); }
-    function setMode(m) { mode=m; document.getElementById("pixelBtn").classList.toggle("active", m==="pixel"); document.getElementById("polyBtn").classList.toggle("active", m==="polygon"); document.getElementById("infoText").innerHTML = (m==="pixel") ? "Click map" : "Click a province"; }
-    document.getElementById("pixelBtn").onclick = () => setMode("pixel");
-    document.getElementById("polyBtn").onclick = () => setMode("polygon");
+        // Moving average smoothing
+        function movingAverage(arr, window=3) {
+            if (arr.length < window) return [...arr];
+            let smoothed = [];
+            for (let i=0; i<arr.length; i++) {
+                let left = Math.max(0, i-Math.floor(window/2));
+                let right = Math.min(arr.length-1, i+Math.floor(window/2));
+                let sum=0, cnt=0;
+                for(let j=left; j<=right; j++) { sum+=arr[j]; cnt++; }
+                smoothed.push(sum/cnt);
+            }
+            return smoothed;
+        }
 
-    // Map init
-    function initMap() {
-        map = L.map('map').setView([-19,29],6);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        map.addLayer(drawnItems);
-        loadLayers();
-        loadGeoJSON();
-        map.on('click', (e) => { if(mode !== "pixel") return; const {lat,lng}=e.latlng; currentPoint={lat,lng}; document.getElementById("infoText").innerHTML = `📍 Pixel: ${lat.toFixed(3)}, ${lng.toFixed(3)}`; loadPixelTimeSeries(lat,lng); });
-        map.fitBounds(zimBounds);
-    }
-    initMap();
-    // additional: update selected counter
-    document.getElementById("multiProvinceSelect").addEventListener("change", () => {
-        let selected = document.querySelectorAll("#multiProvinceSelect option:checked").length;
-        document.getElementById("selectedCountBadge").innerText = `${selected}/3`;
-    });
+        // Update main chart with smoothing/VCI toggles
+        function refreshMainChart() {
+            if (!state.chartDataStore) return;
+            let ndviData = state.chartDataStore.ndvi_raw;
+            let smoothed = state.isSmoothing ? movingAverage(ndviData, 3) : ndviData;
+            let datasets = [
+                { label: 'NDVI', data: smoothed, borderColor: '#2c7a47', fill: false, tension: 0.2, pointRadius: 2, borderWidth: 2 },
+                { label: 'Baseline', data: state.chartDataStore.baseline, borderColor: '#3b82f6', borderDash: [5,5], fill: false, pointRadius: 1 },
+                { label: 'Anomaly', data: state.chartDataStore.anomaly, borderColor: '#f97316', fill: false, pointRadius: 1 }
+            ];
+            if (state.showVCI && state.chartDataStore.vci_raw && state.chartDataStore.vci_raw.length) {
+                datasets.push({ label: 'VCI (%)', data: state.chartDataStore.vci_raw, borderColor: '#a855f7', borderWidth: 2, fill: false, yAxisID: 'y1' });
+            }
+            if (state.chart) {
+                state.chart.data.datasets = datasets;
+                state.chart.update();
+            } else {
+                const ctx = document.getElementById("chart").getContext('2d');
+                state.chart = new Chart(ctx, {
+                    type: 'line', data: { labels: state.chartDataStore.labels, datasets },
+                    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top' } }, scales: { y: { title: { display: true, text: 'NDVI / Anomaly' } }, y1: { position: 'right', title: { text: 'VCI (%)' }, grid: { drawOnChartArea: false } } } }
+                });
+            }
+        }
+
+        // Update quick stats panel
+        function updateQuickStats(region, ndviArr, anomalyArr, vciArr, dates) {
+            if (!ndviArr.length) { document.getElementById('statsContent').innerHTML = "No data"; return; }
+            let latestNDVI = ndviArr[ndviArr.length-1];
+            let latestAnomaly = anomalyArr[anomalyArr.length-1];
+            let meanNDVI = ndviArr.reduce((a,b)=>a+b,0)/ndviArr.length;
+            let health = latestAnomaly < -0.15 ? '⚠️ Severe drought' : (latestAnomaly < -0.07 ? '🍂 Moderate dryness' : (latestAnomaly > 0.1 ? '🌱 Lush' : '🌿 Normal'));
+            let vciLine = (vciArr && vciArr.length) ? `<div class="stat-row"><span>💧 VCI:</span><b>${vciArr[vciArr.length-1]?.toFixed(1)}%</b></div>` : '';
+            document.getElementById('statsContent').innerHTML = `<div><strong>📍 ${region}</strong> ${health}</div><div>🌿 NDVI: ${latestNDVI.toFixed(3)}</div><div>⚠️ Anomaly: ${latestAnomaly.toFixed(3)}</div><div>📊 Mean: ${meanNDVI.toFixed(3)}</div>${vciLine}<div>📅 ${dates[0]} → ${dates[dates.length-1]}</div>`;
+        }
+
+        // Fetch pixel timeseries
+        async function loadPixelTimeSeries(lat, lon) {
+            abortPendingRequests();
+            const start = document.getElementById("start_date").value, end = document.getElementById("end_date").value;
+            document.getElementById("status").innerHTML = `<span class="loading-spinner"></span> Loading pixel data...`;
+            try {
+                const data = await fetchWithTimeout(`/get_ndvi_anomaly_timeseries/?lat=${lat}&lon=${lon}&start_date=${start}&end_date=${end}`);
+                const dates = data.data.map(d=>d.date), ndvi = data.data.map(d=>d.ndvi??0), baseline = data.data.map(d=>d.baseline??0), anomaly = data.data.map(d=>d.anomaly??0);
+                let vci = data.data.map(d=>d.vci !== undefined ? d.vci : null);
+                if (vci.every(v=>v===null)) { let minN=Math.min(...ndvi,-0.1), maxN=Math.max(...ndvi,0.7); vci = ndvi.map(n=> ((n-minN)/(maxN-minN))*100); }
+                state.chartDataStore = { labels: dates, ndvi_raw: ndvi, baseline, anomaly, vci_raw: vci };
+                refreshMainChart();
+                updateQuickStats(`Pixel (${lat.toFixed(2)},${lon.toFixed(2)})`, ndvi, anomaly, vci, dates);
+                document.getElementById("status").innerHTML = "✅ Pixel timeseries loaded";
+            } catch(e) { document.getElementById("status").innerHTML = "❌ Failed to load pixel"; showToast("Pixel data error", true); }
+        }
+
+        async function loadPolygonTimeSeries(geometry, name) {
+            abortPendingRequests();
+            const start = document.getElementById("start_date").value, end = document.getElementById("end_date").value;
+            document.getElementById("status").innerHTML = `<span class="loading-spinner"></span> Loading ${name}...`;
+            try {
+                const data = await fetchWithTimeout('/get_ndvi_zonal_timeseries/', { method: "POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ geometry, start_date: start, end_date: end }) });
+                const dates = data.data.map(d=>d.date), ndvi = data.data.map(d=>d.ndvi??0), baseline = data.data.map(d=>d.baseline??0), anomaly = data.data.map(d=>d.anomaly??0);
+                let vci = data.data.map(d=>d.vci !== undefined ? d.vci : null);
+                if (vci.every(v=>v===null)) { let minN=Math.min(...ndvi,-0.1), maxN=Math.max(...ndvi,0.7); vci = ndvi.map(n=> ((n-minN)/(maxN-minN))*100); }
+                state.chartDataStore = { labels: dates, ndvi_raw: ndvi, baseline, anomaly, vci_raw: vci };
+                refreshMainChart();
+                updateQuickStats(name, ndvi, anomaly, vci, dates);
+                document.getElementById("status").innerHTML = `✅ ${name} loaded`;
+            } catch(e) { document.getElementById("status").innerHTML = "❌ Region load failed"; showToast(`Failed to load ${name}`, true); }
+        }
+
+        // Layer loading
+        async function loadMapLayer() {
+            const start = document.getElementById("mapStartDate").value, end = document.getElementById("mapEndDate").value;
+            try {
+                const data = await fetchWithTimeout(`/get_ndvi_layers_start_end/?start_date=${start}&end_date=${end}`);
+                const layerType = document.querySelector('#animLayer')?.value || 'NDVI';
+                let url = (layerType === "NDVI") ? data.ndvi : (layerType === "Baseline") ? data.baseline : (layerType === "Anomaly") ? data.anomaly : data.vci;
+                if (!url) throw new Error("No tile url");
+                const newLayer = L.tileLayer(url, { bounds: CONFIG.ZIM_BOUNDS, opacity: document.getElementById("opacitySlider").value/100 });
+                if (state.activeLayer) state.map.removeLayer(state.activeLayer);
+                state.activeLayer = newLayer;
+                state.activeLayer.addTo(state.map);
+                updateMapLegend(layerType);
+            } catch(e) { showToast("Map tile error, check backend", true); }
+        }
+
+        function updateMapLegend(layerName) {
+            const leg = document.getElementById("map-legend");
+            if(layerName === "NDVI") leg.innerHTML = `<b>🌱 NDVI</b><br>🔴 -0.2 🟡 0.2 🟢 0.6+`;
+            else if(layerName === "Baseline") leg.innerHTML = `<b>📊 Baseline</b><br>🔵 0 → 0.8+`;
+            else if(layerName === "Anomaly") leg.innerHTML = `<b>⚠️ Anomaly</b><br>🔴 drought 🟢 lush`;
+            else leg.innerHTML = `<b>💧 VCI</b><br>🔴 dry 🟢 healthy`;
+        }
+
+        // Animation Preload & Play
+        async function preloadAnimationFrames() {
+            const start = document.getElementById("animStart").value, end = document.getElementById("animEnd").value;
+            const layerName = document.getElementById("animLayer").value;
+            const frames = getDatesBetweenStep(start, end, 16);
+            if(frames.length === 0) { showToast("Invalid date range", true); return; }
+            const progDiv = document.getElementById('preloadProgressContainer');
+            const progBar = document.getElementById('preloadProgressBar');
+            progDiv.style.display = 'block';
+            state.preloadedFrames = [];
+            for (let i=0; i<frames.length; i++) {
+                try {
+                    const data = await fetchWithTimeout(`/get_ndvi_layers_start_end/?start_date=${frames[i]}&end_date=${addDays(frames[i],16)}`);
+                    let url = (layerName === "NDVI") ? data.ndvi : (layerName === "Baseline") ? data.baseline : (layerName === "Anomaly") ? data.anomaly : data.vci;
+                    if(url) {
+                        const tileLayer = L.tileLayer(url, { bounds: CONFIG.ZIM_BOUNDS, opacity: 0.85 });
+                        state.preloadedFrames.push(tileLayer);
+                    } else { state.preloadedFrames.push(null); }
+                } catch(e) { state.preloadedFrames.push(null); }
+                progBar.style.width = `${((i+1)/frames.length)*100}%`;
+            }
+            state.animationFrameDates = frames;
+            progDiv.style.display = 'none';
+            document.getElementById('frameControl').style.display = 'block';
+            document.getElementById('totalFrames').innerText = frames.length;
+            document.getElementById('frameSlider').max = frames.length-1;
+            return true;
+        }
+
+        function playAnimationFrame(index) {
+            if(!state.preloadedFrames.length || index >= state.preloadedFrames.length) return;
+            const layer = state.preloadedFrames[index];
+            if(!layer) return;
+            if(state.activeLayer) state.map.removeLayer(state.activeLayer);
+            state.activeLayer = layer;
+            state.activeLayer.addTo(state.map);
+            document.getElementById('currentFrameIdx').innerText = index+1;
+            document.getElementById('frameDateLabel').innerText = state.animationFrameDates[index] || '';
+            document.getElementById('frameSlider').value = index;
+        }
+
+        async function startAnimation() {
+            if(state.animationInterval) clearInterval(state.animationInterval);
+            await preloadAnimationFrames();
+            let idx = 0;
+            playAnimationFrame(0);
+            const speed = parseInt(document.getElementById("animSpeed")?.value || 1200);
+            state.animationActive = true;
+            state.animationInterval = setInterval(() => {
+                if(!state.animationActive) return;
+                idx = (idx+1) % state.preloadedFrames.length;
+                playAnimationFrame(idx);
+            }, speed);
+        }
+        function stopAnimation() { if(state.animationInterval) { clearInterval(state.animationInterval); state.animationInterval=null; } state.animationActive=false; }
+
+        // GeoJSON loading & populate province selector
+        async function loadGeoJson() {
+            try {
+                const geojson = await fetchWithTimeout('/static/geojson/zimadm2.geojson');
+                state.geoJsonLayer = L.geoJSON(geojson, {
+                    style: { color: '#facc15', weight: 1.5, fillOpacity: 0 },
+                    onEachFeature: (feature, layer) => {
+                        const name = feature.properties.ADM2_EN;
+                        state.provinceGeometries.set(name, feature.geometry);
+                        if(!state.provinceList.includes(name)) state.provinceList.push(name);
+                        layer.bindTooltip(name);
+                        layer.on('click', () => {
+                            if(state.currentMode !== 'polygon') return;
+                            state.currentProvince = name;
+                            document.getElementById("infoText").innerHTML = `🗺️ ${name}`;
+                            loadPolygonTimeSeries(feature.geometry, name);
+                        });
+                    }
+                }).addTo(state.map);
+                const selectEl = document.getElementById("multiProvinceSelect");
+                selectEl.innerHTML = '';
+                state.provinceList.sort().forEach(p => { let opt = document.createElement("option"); opt.value = p; opt.textContent = p; selectEl.appendChild(opt); });
+            } catch(e) { showToast("GeoJSON failed to load, using fallback", true); console.warn(e); }
+        }
+
+        // Multi-region comparison
+        async function loadMultiComparison(provinceNames) {
+            if(provinceNames.length === 0 || provinceNames.length > CONFIG.MAX_COMPARE_REGIONS) return;
+            const start = document.getElementById("start_date").value, end = document.getElementById("end_date").value;
+            document.getElementById("compareStatus").innerHTML = `<span class="loading-spinner"></span> Loading comparison...`;
+            let results = [];
+            for (let name of provinceNames) {
+                let geom = state.provinceGeometries.get(name);
+                if(!geom) continue;
+                try {
+                    let data = await fetchWithTimeout('/get_ndvi_zonal_timeseries/', { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ geometry: geom, start_date: start, end_date: end }) });
+                    results.push({ name, dates: data.data.map(d=>d.date), ndvi: data.data.map(d=>d.ndvi??0), vci: data.data.map(d=>d.vci !== undefined ? d.vci : null) });
+                } catch(e) { console.warn(name, e); }
+            }
+            if(results.length === 0) { document.getElementById("compareStatus").innerHTML = "❌ No data"; return; }
+            const showVci = document.getElementById("compareVciToggle").checked;
+            let datasets = [];
+            const colors = ['#2c7a47','#e67e22','#2980b9','#8e44ad'];
+            results.forEach((reg, idx) => {
+                let dataField = showVci ? (reg.vci && reg.vci.every(v=>v!==null) ? reg.vci : reg.ndvi.map(n=> ((n - Math.min(...reg.ndvi,-0.1))/(Math.max(...reg.ndvi,0.7)-Math.min(...reg.ndvi,-0.1))*100))) : reg.ndvi;
+                datasets.push({ label: `${reg.name} ${showVci ? '(VCI%)' : '(NDVI)'}`, data: dataField, borderColor: colors[idx%colors.length], borderWidth: 2, fill: false, tension: 0.2 });
+            });
+            if(state.compareChart) state.compareChart.destroy();
+            const ctx = document.getElementById("compareChart").getContext('2d');
+            state.compareChart = new Chart(ctx, { type: 'line', data: { labels: results[0].dates, datasets }, options: { responsive: true, maintainAspectRatio: true } });
+            document.getElementById("compareStatus").innerHTML = `✅ ${results.length} regions compared`;
+            document.getElementById("compareInsights").innerHTML = results.map(r => `🔹 ${r.name}: latest NDVI ${r.ndvi[r.ndvi.length-1]?.toFixed(3)}`).join('<br>');
+            state.compareDataCache = { labels: results[0].dates, datasets: results };
+        }
+
+        // Event wiring & initializers
+        function bindEvents() {
+            document.getElementById("reloadBtn").onclick = () => loadMapLayer();
+            document.getElementById("startAnimationBtn").onclick = startAnimation;
+            document.getElementById("stopAnimationBtn").onclick = stopAnimation;
+            document.getElementById("frameSlider").addEventListener('input', (e) => { if(state.animationInterval) stopAnimation(); playAnimationFrame(parseInt(e.target.value)); });
+            document.getElementById("smoothToggle").onchange = (e) => { state.isSmoothing = e.target.checked; refreshMainChart(); };
+            document.getElementById("vciToggle").onchange = (e) => { state.showVCI = e.target.checked; refreshMainChart(); };
+            document.getElementById("pixelBtn").onclick = () => { state.currentMode = "pixel"; document.getElementById("pixelBtn").classList.add("active"); document.getElementById("polyBtn").classList.remove("active"); document.getElementById("infoText").innerHTML = "📍 Click on map for pixel data"; };
+            document.getElementById("polyBtn").onclick = () => { state.currentMode = "polygon"; document.getElementById("polyBtn").classList.add("active"); document.getElementById("pixelBtn").classList.remove("active"); document.getElementById("infoText").innerHTML = "🗺️ Click a province"; };
+            document.getElementById("drawBtn").onclick = () => {
+                const drawControl = new L.Control.Draw({ draw: { polygon: true, rectangle: true, circle: false }, edit: { featureGroup: state.drawnItems, remove: true } });
+                state.map.addControl(drawControl);
+                state.map.once('draw:created', (e) => { state.drawnItems.clearLayers(); state.drawnItems.addLayer(e.layer); loadPolygonTimeSeries(e.layer.toGeoJSON().geometry, "Custom region"); state.map.removeControl(drawControl); });
+            };
+            document.getElementById("compareBtn").onclick = () => { let sel = Array.from(document.getElementById("multiProvinceSelect").selectedOptions).map(o=>o.value); if(sel.length>3) { showToast("Max 3 regions", true); return; } loadMultiComparison(sel); };
+            document.getElementById("clearCompareBtn").onclick = () => { if(state.compareChart) state.compareChart.destroy(); state.compareChart=null; document.getElementById("compareStatus").innerHTML = "Cleared"; document.getElementById("compareInsights").innerHTML = "—"; };
+            document.getElementById("compareVciToggle").onchange = () => { let sel = Array.from(document.getElementById("multiProvinceSelect").selectedOptions).map(o=>o.value); if(sel.length) loadMultiComparison(sel); };
+            document.getElementById("exportCSVBtn").onclick = () => { if(!state.chartDataStore) return showToast("No data to export"); let csv="Date,NDVI,Baseline,Anomaly,VCI\n"; for(let i=0;i<state.chartDataStore.labels.length;i++) csv+=`${state.chartDataStore.labels[i]},${state.chartDataStore.ndvi_raw[i]},${state.chartDataStore.baseline[i]},${state.chartDataStore.anomaly[i]},${state.chartDataStore.vci_raw?.[i]??""}\n`; const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv])); a.download="timeseries.csv"; a.click(); };
+            document.getElementById("exportPNGBtn").onclick = () => { if(state.chart) { let a=document.createElement("a"); a.href=state.chart.toBase64Image(); a.download="ndvi_chart.png"; a.click(); } };
+            document.getElementById("exportCompareCSVBtn").onclick = () => { if(!state.compareDataCache) return showToast("Run comparison first"); let csv="Date,"+state.compareDataCache.datasets.map(d=>d.name+"_NDVI").join(",")+"\n"; for(let i=0;i<state.compareDataCache.labels.length;i++){ let row=state.compareDataCache.labels[i]; for(let ds of state.compareDataCache.datasets) row+=`,${ds.ndvi[i]?.toFixed(4)||''}`; csv+=row+"\n"; } let a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv])); a.download="comparison.csv"; a.click(); };
+            document.getElementById("opacitySlider").addEventListener("input", (e) => { let val=e.target.value/100; document.getElementById("opacityValue").innerText=e.target.value+"%"; if(state.activeLayer) state.activeLayer.setOpacity(val); });
+            document.querySelectorAll('.preset-btn').forEach(btn => btn.addEventListener('click', () => { let preset = btn.dataset.preset; let start=new Date(), end=new Date(); if(preset==='3m') start.setMonth(start.getMonth()-3); if(preset==='6m') start.setMonth(start.getMonth()-6); if(preset==='12m') start.setFullYear(start.getFullYear()-1); if(preset==='2024') { start=new Date('2024-01-01'); end=new Date('2024-12-31'); } if(end>new Date()) end=new Date(); document.getElementById('start_date').value=start.toISOString().split('T')[0]; document.getElementById('end_date').value=end.toISOString().split('T')[0]; if(state.currentMode==='pixel' && state.currentPoint) loadPixelTimeSeries(state.currentPoint.lat, state.currentPoint.lon); else if(state.currentMode==='polygon' && state.currentProvince) { let geom=state.provinceGeometries.get(state.currentProvince); if(geom) loadPolygonTimeSeries(geom, state.currentProvince); } }));
+            document.getElementById("multiProvinceSelect").addEventListener("change", () => { let cnt = document.querySelectorAll("#multiProvinceSelect option:checked").length; document.getElementById("selectedCountBadge").innerText = `${cnt}/3`; });
+        }
+
+        function initMap() {
+            state.map = L.map('map').setView([-19,29],6);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(state.map);
+            state.map.addLayer(state.drawnItems);
+            state.map.on('click', (e) => { if(state.currentMode !== 'pixel') return; const {lat,lng}=e.latlng; state.currentPoint={lat,lng}; loadPixelTimeSeries(lat,lng); document.getElementById("infoText").innerHTML = `📍 Pixel: ${lat.toFixed(3)}, ${lng.toFixed(3)}`; });
+            state.map.fitBounds(CONFIG.ZIM_BOUNDS);
+            loadMapLayer();
+            loadGeoJson();
+        }
+
+        // entry
+        initMap();
+        bindEvents();
+        // add speed slider manually
+        const speedContainer = document.createElement('div');
+        speedContainer.innerHTML = `<label>⏩ Frame speed (ms)</label><input type="number" id="animSpeed" value="1000" min="300" step="100">`;
+        document.querySelector('#frameControl').insertAdjacentElement('beforebegin', speedContainer);
+    })();
 </script>
 </body>
 </html>
