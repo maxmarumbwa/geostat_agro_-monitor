@@ -107,6 +107,7 @@ urlpatterns = [
         views.report_generator,
         name="report_generator",
     ),
+    # path("get_district_vci/", views.get_district_vci, name="get_district_vci"),
     # path(
     #     "get_all_vegetation_tiles/",
     #     views.get_all_vegetation_tiles,

@@ -28,6 +28,7 @@ SERVICE_ACCOUNT_KEY_FILE = BASE_DIR / "static" / "key" / "ee-key.json"
 
 # The service account email
 SERVICE_ACCOUNT_EMAIL = "ee-django-app@ee-cloud-maxmarumbwa.iam.gserviceaccount.com"
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520  # 20 MB
 
 
 def initialize_earth_engine():

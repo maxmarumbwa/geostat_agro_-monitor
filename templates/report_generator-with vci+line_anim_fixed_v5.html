@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NDVI & VCI Dashboard - Zimbabwe (Preload Animation)</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Leaflet Draw -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Arial; background: #1e2a2e; }
+        .container { display: flex; height: 100vh; }
+        .sidebar { width: 420px; background: #f4f6f8; padding: 1rem; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 12px; }
+        #map { flex: 1; position: relative; }
+        .chart-container { background: white; border-radius: 12px; padding: 12px; margin-top: 8px; }
+        canvas { max-height: 260px; width: 100%; }
+        button, .preset-btn { background: #2c7a47; border: none; color: white; padding: 6px 12px; border-radius: 20px; cursor: pointer; margin: 4px 2px; font-size: 0.85rem; transition: 0.1s; }
+        button:hover { background: #1e5a36; }
+        .mode-toggle { display: flex; gap: 8px; margin-bottom: 4px; }
+        .mode-btn { background: #6c757d; flex: 1; }
+        .mode-btn.active { background: #2c7a47; }
+        .status { font-size: 0.8rem; margin-top: 6px; padding: 8px; background: #e9ecef; border-radius: 8px; }
+        hr { margin: 12px 0; }
+        .loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #2c7a47; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .export-buttons { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+        .stats-panel { background: #e2e8f0; border-radius: 12px; padding: 8px 12px; font-size: 0.85rem; border-left: 4px solid #2c7a47; margin: 5px 0; }
+        .stats-panel h4 { margin: 0 0 6px 0; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .frame-control { background: #fff; border-radius: 8px; margin-top: 6px; padding: 8px; }
+        .frame-control input { width: 100%; margin: 6px 0; cursor: pointer; }
+        .frame-badge { display: flex; justify-content: space-between; font-size: 0.75rem; }
+        .opacity-slider { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+        .opacity-slider input { flex: 1; }
+        .preset-group { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+        .preset-btn { background: #4b6a7c; font-size: 0.75rem; padding: 4px 10px; }
+        .smooth-toggle, .vci-toggle { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+        #chart-legend div { display: flex; align-items: center; font-size: 0.8rem; margin-bottom: 4px; }
+        #chart-legend span { display: inline-block; width: 14px; height: 14px; margin-right: 6px; }
+        #chart-legend .baseline-line { border-top: 2px dashed blue; height: 0; width: 14px; background: none; }
+        #map-legend { position: absolute; bottom: 30px; left: 10px; padding: 10px 14px; background: white; border-radius: 8px; box-shadow: 0 0 8px rgba(0,0,0,0.3); font-size: 12px; z-index: 1000; line-height: 1.5; }
+        #map-legend i { display: inline-block; width: 18px; height: 18px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+        .badge { background: #2c7a47; color: white; border-radius: 30px; padding: 2px 8px; font-size: 0.7rem; }
+        .progress-bar-container { width: 100%; background: #ddd; border-radius: 10px; margin: 8px 0; overflow: hidden; }
+        .progress-bar { width: 0%; height: 8px; background: #2c7a47; transition: width 0.3s; }
+        .preload-status { font-size: 0.75rem; color: #2c7a47; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+<div class="sidebar">
+
+    <h3>🌿 NDVI & VCI Dashboard <span style="font-size:0.7rem;">Zimbabwe</span></h3>
+
+    <!-- Date Presets -->
+    <div>
+        <label>⏩ Animation Date Presets</label>
+        <div class="preset-group">
+            <button class="preset-btn" data-preset="3m">📆 Last 3 Months</button>
+            <button class="preset-btn" data-preset="6m">📆 Last 6 Months</button>
+            <button class="preset-btn" data-preset="12m">📆 Last Year</button>
+            <button class="preset-btn" data-preset="2024">🌾 2024 Season</button>
+        </div>
+    </div>
+    <hr>
+
+    <label>📅 Map Start Date:</label>
+    <input type="date" id="mapStartDate" value="2024-01-01" style="width:100%;">
+    <label>📅 Map End Date:</label>
+    <input type="date" id="mapEndDate" value="2024-01-16" style="width:100%;">
+    <button id="reloadBtn">⟳ Reload map</button>
+    <hr>
+
+    <!-- Animation with preload -->
+    <div>
+        <h4>🎞️ Animation Control <span class="badge">preloads all tiles first</span></h4>
+        <label>Start Date:</label>
+        <input type="date" id="animStart" value="2024-01-01" style="width:100%;">
+        <label>End Date:</label>
+        <input type="date" id="animEnd" value="2024-06-01" style="width:100%;">
+        <label>Speed (ms):</label>
+        <input type="number" id="animSpeed" value="1200" min="300" style="width:100%;">
+        <label>Layer:</label>
+        <select id="animLayer" style="width:100%; margin-bottom:5px;">
+            <option value="NDVI">NDVI</option>
+            <option value="Baseline">Baseline</option>
+            <option value="Anomaly">Anomaly</option>
+            <option value="VCI">VCI</option>
+        </select>
+        <div style="display: flex; gap: 8px; margin: 6px 0;">
+            <button id="startAnimationBtn">▶️ Start (Preload & Animate)</button>
+            <button id="stopAnimationBtn">⏹ Stop</button>
+        </div>
+        <!-- Preload progress -->
+        <div id="preloadProgressContainer" class="progress-bar-container" style="display:none;">
+            <div class="progress-bar" id="preloadProgressBar"></div>
+        </div>
+        <div id="preloadStatus" class="preload-status" style="display:none;"></div>
+        
+        <div class="frame-control" id="frameControl" style="display: none;">
+            <div class="frame-badge"><span>Frame <span id="currentFrameIdx">0</span></span><span>Total: <span id="totalFrames">0</span></span></div>
+            <input type="range" id="frameSlider" min="0" max="0" value="0" step="1">
+            <div style="font-size: 0.7rem; text-align: center;" id="frameDateLabel">—</div>
+        </div>
+        <div style="margin-top:5px;">
+            <strong>Current Window:</strong> <span id="animCurrentDate">—</span>
+        </div>
+    </div>
+    <hr>
+
+    <label>📊 Time Series Range:</label>
+    <input type="date" id="start_date" value="2024-01-01" style="width:100%;">
+    <input type="date" id="end_date" value="2024-06-01" style="width:100%; margin-top:5px;">
+
+    <!-- Layer Opacity -->
+    <div class="opacity-slider">
+        <span>🎨 Layer Opacity</span>
+        <input type="range" id="opacitySlider" min="0" max="100" value="100">
+        <span id="opacityValue">100%</span>
+    </div>
+
+    <hr>
+    <h4>🗺️ Layers</h4>
+    <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+        <button onclick="showLayer('NDVI')">🌱 NDVI</button>
+        <button onclick="showLayer('Baseline')">📊 Baseline</button>
+        <button onclick="showLayer('Anomaly')">⚠️ Anomaly</button>
+        <button onclick="showLayer('VCI')">💧 VCI</button>
+    </div>
+
+    <hr>
+    <h4>🔄 Mode</h4>
+    <div class="mode-toggle">
+        <button id="pixelBtn" class="mode-btn">📍 Pixel</button>
+        <button id="polyBtn" class="mode-btn active">🗺 Province</button>
+    </div>
+    <button onclick="enableDrawing()">✏️ Draw Custom Region</button>
+    <div id="infoText">Click a province</div>
+
+    <!-- Quick Stats -->
+    <div class="stats-panel" id="statsPanel">
+        <h4>📈 Quick Stats</h4>
+        <div id="statsContent">No region/pixel selected</div>
+    </div>
+
+    <div class="chart-container">
+        <div id="chart-legend">
+            <div><span style="background:green;"></span>NDVI</div>
+            <div><span class="baseline-line"></span>Baseline</div>
+            <div><span style="background:red;"></span>Anomaly</div>
+            <div id="vciLegendItem" style="display:none;"><span style="background:#9b59b6;"></span>VCI (0-100)</div>
+        </div>
+        <div class="smooth-toggle">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" id="smoothToggle"> 📉 Smooth NDVI (3‑point MA)
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin-left: 12px;">
+                <input type="checkbox" id="vciToggle"> 📈 Show VCI on graph
+            </label>
+        </div>
+        <canvas id="chart"></canvas>
+        <div class="export-buttons">
+            <button onclick="exportCSV()">💾 Export CSV</button>
+            <button onclick="exportPNG()">🖼 Export PNG</button>
+        </div>
+        <div id="status" class="status">Ready</div>
+    </div>
+</div>
+
+<div id="map">
+    <div id="map-legend"></div>
+</div>
+</div>
+
+<script>
+let map, layers = {}, activeLayer;
+let chart = null;
+let chartDataStore = null;
+let mode = "polygon";
+let currentPoint = null;
+let currentProvince = null;
+let geoLayer = null;
+let animationInterval = null;
+let drawnItems = new L.FeatureGroup();
+let animationFramesList = [];      // array of start dates
+let currentAnimFrameIndex = 0;
+let isSmoothing = false;
+let showVCI = false;
+let tileCache = new Map();          // URL cache
+let preloadedLayers = [];           // array of L.tileLayer objects for animation
+let isPreloading = false;
+let animationActive = false;
+
+const zimBounds = L.latLngBounds(L.latLng(-23.5, 25.3), L.latLng(-15.6, 32.0));
+function addDays(dateStr, days) { let d = new Date(dateStr); d.setDate(d.getDate()+days); return d.toISOString().split('T')[0]; }
+
+// --------------------- PRESETS ---------------------
+function setDatePreset(preset) {
+    let start = new Date(), end = new Date();
+    switch(preset) {
+        case '3m': start.setMonth(start.getMonth()-3); break;
+        case '6m': start.setMonth(start.getMonth()-6); break;
+        case '12m': start.setFullYear(start.getFullYear()-1); break;
+        case '2024': start = new Date('2024-01-01'); end = new Date('2024-12-31'); break;
+        default: return;
+    }
+    if(end > new Date()) end = new Date();
+    document.getElementById('start_date').value = start.toISOString().split('T')[0];
+    document.getElementById('end_date').value = end.toISOString().split('T')[0];
+    document.getElementById('animStart').value = start.toISOString().split('T')[0];
+    document.getElementById('animEnd').value = end.toISOString().split('T')[0];
+    if (mode === "pixel" && currentPoint) loadPixelTimeSeries(currentPoint.lat, currentPoint.lon);
+    else if (mode === "polygon" && currentProvince && geoLayer) {
+        geoLayer.eachLayer(layer => { if(layer.feature && layer.feature.properties.ADM2_EN === currentProvince) loadPolygonTimeSeries(layer.feature.geometry, currentProvince); });
+    }
+}
+document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => setDatePreset(btn.dataset.preset));
+});
+
+// Opacity
+const opacitySlider = document.getElementById('opacitySlider');
+const opacityVal = document.getElementById('opacityValue');
+opacitySlider.addEventListener('input', (e) => {
+    let val = e.target.value;
+    opacityVal.innerText = val + '%';
+    if (activeLayer && activeLayer.setOpacity) activeLayer.setOpacity(val/100);
+});
+
+// Smoothing & VCI toggle
+function computeMovingAverage(arr, window=3) {
+    if (arr.length < window) return [...arr];
+    let smoothed = [];
+    for (let i=0; i<arr.length; i++) {
+        let left = Math.max(0, i - Math.floor(window/2));
+        let right = Math.min(arr.length-1, i + Math.floor(window/2));
+        let sum = 0, count = 0;
+        for (let j=left; j<=right; j++) { sum += arr[j]; count++; }
+        smoothed.push(sum/count);
+    }
+    return smoothed;
+}
+function redrawChartWithOptions() {
+    if (!chartDataStore) return;
+    let ndviData = chartDataStore.ndvi_raw;
+    let smoothed = isSmoothing ? computeMovingAverage(ndviData, 3) : ndviData;
+    let datasets = [
+        { label: 'NDVI', data: smoothed, borderColor: 'green', fill: false, tension: 0.2, pointRadius: 2, yAxisID: 'y' },
+        { label: 'Baseline', data: chartDataStore.baseline, borderColor: 'blue', borderDash: [5,5], fill: false, tension: 0.2, pointRadius: 1, yAxisID: 'y' },
+        { label: 'Anomaly', data: chartDataStore.anomaly, borderColor: 'red', fill: false, tension: 0.2, pointRadius: 1, yAxisID: 'y' }
+    ];
+    if (showVCI && chartDataStore.vci_raw && chartDataStore.vci_raw.length) {
+        datasets.push({ label: 'VCI (%)', data: chartDataStore.vci_raw, borderColor: '#9b59b6', borderWidth: 2, fill: false, tension: 0.2, pointRadius: 2, yAxisID: 'y1' });
+        document.getElementById('vciLegendItem').style.display = 'flex';
+    } else {
+        document.getElementById('vciLegendItem').style.display = 'none';
+    }
+    if (chart) {
+        chart.data.datasets = datasets;
+        chart.update();
+    } else {
+        const ctx = document.getElementById("chart").getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: chartDataStore.labels, datasets: datasets },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                plugins: { legend: { position: 'top' } },
+                scales: { y: { title: { display: true, text: 'NDVI / Anomaly' } }, y1: { position: 'right', title: { display: true, text: 'VCI (%)' }, grid: { drawOnChartArea: false } } }
+            }
+        });
+    }
+}
+document.getElementById('smoothToggle').addEventListener('change', (e) => { isSmoothing = e.target.checked; redrawChartWithOptions(); });
+document.getElementById('vciToggle').addEventListener('change', (e) => { showVCI = e.target.checked; redrawChartWithOptions(); });
+
+// Quick stats
+function updateQuickStats(regionName, ndviArr, baselineArr, anomalyArr, vciArr, datesArr) {
+    if (!ndviArr || ndviArr.length === 0) { document.getElementById('statsContent').innerHTML = "No data"; return; }
+    const latestNDVI = ndviArr[ndviArr.length-1];
+    const latestAnomaly = anomalyArr[anomalyArr.length-1];
+    const meanNDVI = ndviArr.reduce((a,b)=>a+b,0)/ndviArr.length;
+    let healthStatus = "🌿 Normal";
+    if (latestAnomaly < -0.15) healthStatus = "⚠️ Severe Drought";
+    else if (latestAnomaly < -0.07) healthStatus = "🍂 Moderate Dryness";
+    else if (latestAnomaly > 0.1) healthStatus = "🌱 Lush";
+    let vciLine = "";
+    if (vciArr && vciArr.length && vciArr[vciArr.length-1] !== undefined) {
+        let latestVCI = vciArr[vciArr.length-1];
+        vciLine = `<div class="stat-row"><span>💧 Latest VCI:</span><span><b>${latestVCI.toFixed(1)}%</b></span></div>`;
+    }
+    document.getElementById('statsContent').innerHTML = `
+        <div class="stat-row"><strong>📍 ${regionName}</strong> <span>${healthStatus}</span></div>
+        <div class="stat-row"><span>🌿 Latest NDVI:</span><span><b>${latestNDVI.toFixed(3)}</b></span></div>
+        <div class="stat-row"><span>⚠️ Latest Anomaly:</span><span><b>${latestAnomaly.toFixed(3)}</b></span></div>
+        <div class="stat-row"><span>📊 Mean NDVI:</span><span>${meanNDVI.toFixed(3)}</span></div>
+        ${vciLine}
+        <div class="stat-row"><span>📅 Period:</span><span>${datesArr[0]} → ${datesArr[datesArr.length-1]}</span></div>
+    `;
+}
+
+// Data loading
+function loadPixelTimeSeries(lat, lon) {
+    const start = document.getElementById("start_date").value;
+    const end = document.getElementById("end_date").value;
+    const statusDiv = document.getElementById("status");
+    statusDiv.innerHTML = `<span class="loading-spinner"></span> Loading pixel data...`;
+    fetch(`/get_ndvi_anomaly_timeseries/?lat=${lat}&lon=${lon}&start_date=${start}&end_date=${end}`)
+        .then(res => res.json())
+        .then(data => {
+            const dates = data.data.map(d => d.date);
+            const ndvi = data.data.map(d => d.ndvi ?? 0);
+            const baseline = data.data.map(d => d.baseline ?? 0);
+            const anomaly = data.data.map(d => d.anomaly ?? 0);
+            let vci = data.data.map(d => d.vci !== undefined ? d.vci : null);
+            if (vci.every(v => v === null)) {
+                const minNDVI = Math.min(...ndvi, -0.1);
+                const maxNDVI = Math.max(...ndvi, 0.7);
+                vci = ndvi.map(n => ((n - minNDVI) / (maxNDVI - minNDVI)) * 100);
+            }
+            chartDataStore = { labels: dates, ndvi_raw: ndvi, baseline, anomaly, vci_raw: vci };
+            redrawChartWithOptions();
+            updateQuickStats(`Pixel (${lat.toFixed(2)}, ${lon.toFixed(2)})`, ndvi, baseline, anomaly, vci, dates);
+            statusDiv.innerHTML = `✅ Pixel loaded (${dates.length} points)`;
+        })
+        .catch(err => { console.error(err); statusDiv.innerHTML = "❌ Pixel time series failed"; });
+}
+
+function loadPolygonTimeSeries(geometry, name) {
+    const start = document.getElementById("start_date").value;
+    const end = document.getElementById("end_date").value;
+    const statusDiv = document.getElementById("status");
+    statusDiv.innerHTML = `<span class="loading-spinner"></span> Loading ${name}...`;
+    fetch('/get_ndvi_zonal_timeseries/', {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ geometry, start_date: start, end_date: end })
+    })
+    .then(res => res.json())
+    .then(data => {
+        const dates = data.data.map(d => d.date);
+        const ndvi = data.data.map(d => d.ndvi ?? 0);
+        const baseline = data.data.map(d => d.baseline ?? 0);
+        const anomaly = data.data.map(d => d.anomaly ?? 0);
+        let vci = data.data.map(d => d.vci !== undefined ? d.vci : null);
+        if (vci.every(v => v === null)) {
+            const minNDVI = Math.min(...ndvi, -0.1);
+            const maxNDVI = Math.max(...ndvi, 0.7);
+            vci = ndvi.map(n => ((n - minNDVI) / (maxNDVI - minNDVI)) * 100);
+        }
+        chartDataStore = { labels: dates, ndvi_raw: ndvi, baseline, anomaly, vci_raw: vci };
+        redrawChartWithOptions();
+        updateQuickStats(name, ndvi, baseline, anomaly, vci, dates);
+        statusDiv.innerHTML = `✅ ${name} loaded (${dates.length} points)`;
+    })
+    .catch(err => { console.error(err); statusDiv.innerHTML = "❌ Region data failed"; });
+}
+
+// -------- MAP LEGEND WITH PROPER COLOR SQUARES --------
+function updateMapLegend(layerName) {
+    const legendDiv = document.getElementById("map-legend");
+    if(layerName === "NDVI") {
+        legendDiv.innerHTML = `<b>🌱 NDVI</b><br>
+            <i style="background:#d73027;"></i> -0.2<br>
+            <i style="background:#fc8d59;"></i> 0.0<br>
+            <i style="background:#fee08b;"></i> 0.2<br>
+            <i style="background:#d9ef8b;"></i> 0.4<br>
+            <i style="background:#91cf60;"></i> 0.6<br>
+            <i style="background:#1a9850;"></i> 0.8+`;
+    } else if(layerName === "Baseline") {
+        legendDiv.innerHTML = `<b>📊 Baseline NDVI</b><br>
+            <i style="background:#f7fbff;"></i> 0<br>
+            <i style="background:#c6dbef;"></i> 0.2<br>
+            <i style="background:#6baed6;"></i> 0.4<br>
+            <i style="background:#2171b5;"></i> 0.6<br>
+            <i style="background:#084594;"></i> 0.8+`;
+    } else if(layerName === "Anomaly") {
+        legendDiv.innerHTML = `<b>⚠️ Anomaly</b><br>
+            <i style="background:#d73027;"></i> -0.5<br>
+            <i style="background:#fc8d59;"></i> -0.25<br>
+            <i style="background:#ffffbf;"></i> 0<br>
+            <i style="background:#91cf60;"></i> 0.25<br>
+            <i style="background:#1a9850;"></i> 0.5+`;
+    } else if(layerName === "VCI") {
+        legendDiv.innerHTML = `<b>💧 VCI (Vegetation Condition)</b><br>
+            <i style="background:#8b0000;"></i> 0-15 Extreme Drought<br>
+            <i style="background:#ff0000;"></i> 15-30 Severe<br>
+            <i style="background:#ffa500;"></i> 30-40 Moderate<br>
+            <i style="background:#ffff00;"></i> 40-60 Stressed<br>
+            <i style="background:#90ee90;"></i> 60-80 Healthy<br>
+            <i style="background:#008000;"></i> 80-100 Lush`;
+    }
+}
+
+// -------- TILE URL FETCH WITH CACHING --------
+async function fetchTileUrl(layerName, startDate) {
+    const cacheKey = `${layerName}|${startDate}`;
+    if (tileCache.has(cacheKey)) return tileCache.get(cacheKey);
+    const endDate = addDays(startDate, 16);
+    try {
+        const response = await fetch(`/get_ndvi_layers_start_end/?start_date=${startDate}&end_date=${endDate}`);
+        const data = await response.json();
+        let url = null;
+        if (layerName === "NDVI") url = data.ndvi;
+        else if (layerName === "Baseline") url = data.baseline;
+        else if (layerName === "Anomaly") url = data.anomaly;
+        else if (layerName === "VCI") url = data.vci;
+        if (url) tileCache.set(cacheKey, url);
+        return url;
+    } catch(e) {
+        console.error("Tile fetch error:", e);
+        return null;
+    }
+}
+
+// Create a Leaflet layer from URL
+function createTileLayer(url) {
+    if (!url) return null;
+    return L.tileLayer(url, { bounds: zimBounds, maxBounds: zimBounds, opacity: opacitySlider.value/100 });
+}
+
+// ---------- PRELOAD ALL FRAMES ----------
+async function preloadAllFrames(frames, layerName, onProgress, onComplete) {
+    preloadedLayers = [];
+    for (let i = 0; i < frames.length; i++) {
+        const startDate = frames[i];
+        const url = await fetchTileUrl(layerName, startDate);
+        if (!url) {
+            console.warn(`No tile URL for ${startDate}`);
+            preloadedLayers.push(null);
+            if (onProgress) onProgress(i+1, frames.length);
+            continue;
+        }
+        // Create layer and add to map with opacity 0 to trigger loading, then remove after loaded
+        const tempLayer = createTileLayer(url);
+        if (tempLayer) {
+            tempLayer.setOpacity(0);
+            tempLayer.addTo(map);
+            await new Promise((resolve) => {
+                let resolved = false;
+                tempLayer.on('load', () => { resolved = true; resolve(); });
+                tempLayer.on('tileerror', () => { if (!resolved) resolve(); });
+                setTimeout(() => { if (!resolved) resolve(); }, 3000);
+            });
+            map.removeLayer(tempLayer);
+            // Store the fully loaded layer (recreate with proper opacity)
+            const finalLayer = createTileLayer(url);
+            finalLayer.setOpacity(opacitySlider.value/100);
+            preloadedLayers.push(finalLayer);
+        } else {
+            preloadedLayers.push(null);
+        }
+        if (onProgress) onProgress(i+1, frames.length);
+    }
+    if (onComplete) onComplete();
+}
+
+// ---------- ANIMATION WITH PRELOAD ----------
+function getDatesBetweenForAnim(startDate, endDate) {
+    let dates = [];
+    let current = new Date(startDate);
+    const end = new Date(endDate);
+    while(current <= end){
+        dates.push(current.toISOString().split("T")[0]);
+        current.setDate(current.getDate() + 16);
+    }
+    return dates;
+}
+
+function updateFrameSliderUI() {
+    const total = animationFramesList.length;
+    const slider = document.getElementById('frameSlider');
+    if(total>0){
+        slider.max = total-1;
+        slider.value = currentAnimFrameIndex;
+        document.getElementById('currentFrameIdx').innerText = currentAnimFrameIndex+1;
+        document.getElementById('totalFrames').innerText = total;
+        const frameStart = animationFramesList[currentAnimFrameIndex];
+        const frameEnd = addDays(frameStart,16);
+        document.getElementById('frameDateLabel').innerText = `${frameStart} → ${frameEnd}`;
+        document.getElementById('frameControl').style.display = 'block';
+    } else { document.getElementById('frameControl').style.display = 'none'; }
+}
+
+function switchToPreloadedFrame(index) {
+    if (!preloadedLayers.length || index >= preloadedLayers.length) return;
+    const newLayer = preloadedLayers[index];
+    if (!newLayer) return;
+    if (activeLayer) map.removeLayer(activeLayer);
+    activeLayer = newLayer;
+    activeLayer.addTo(map);
+    const layerName = document.getElementById("animLayer").value;
+    updateMapLegend(layerName);
+    // Update UI
+    const frameStart = animationFramesList[index];
+    const frameEnd = addDays(frameStart,16);
+    document.getElementById('mapStartDate').value = frameStart;
+    document.getElementById('mapEndDate').value = frameEnd;
+    document.getElementById('animCurrentDate').innerHTML = `${frameStart} → ${frameEnd}`;
+    currentAnimFrameIndex = index;
+    updateFrameSliderUI();
+    // Refresh time series for current region/pixel
+    if (mode === "pixel" && currentPoint) loadPixelTimeSeries(currentPoint.lat, currentPoint.lon);
+    if (mode === "polygon" && currentProvince && geoLayer) {
+        geoLayer.eachLayer(layer => { if(layer.feature && layer.feature.properties.ADM2_EN === currentProvince) loadPolygonTimeSeries(layer.feature.geometry, currentProvince); });
+    }
+}
+
+async function startAnimationWithPreload() {
+    if (animationInterval) clearInterval(animationInterval);
+    if (isPreloading) {
+        document.getElementById("status").innerHTML = "⏳ Already preloading, please wait...";
+        return;
+    }
+    const start = document.getElementById("animStart").value;
+    const end = document.getElementById("animEnd").value;
+    const speed = parseInt(document.getElementById("animSpeed").value);
+    const layerName = document.getElementById("animLayer").value;
+    if(!start || !end) return alert("Set start and end dates");
+    animationFramesList = getDatesBetweenForAnim(start, end);
+    if(animationFramesList.length === 0) return alert("No frames");
+    
+    // Show progress UI
+    const progressContainer = document.getElementById('preloadProgressContainer');
+    const progressBar = document.getElementById('preloadProgressBar');
+    const preloadStatusDiv = document.getElementById('preloadStatus');
+    progressContainer.style.display = 'block';
+    preloadStatusDiv.style.display = 'block';
+    progressBar.style.width = '0%';
+    preloadStatusDiv.innerHTML = 'Preloading tiles... 0%';
+    isPreloading = true;
+    document.getElementById("startAnimationBtn").disabled = true;
+    
+    await preloadAllFrames(animationFramesList, layerName, 
+        (loaded, total) => {
+            const percent = (loaded / total) * 100;
+            progressBar.style.width = percent + '%';
+            preloadStatusDiv.innerHTML = `Preloading tiles... ${loaded}/${total} (${Math.round(percent)}%)`;
+        },
+        () => {
+            isPreloading = false;
+            progressContainer.style.display = 'none';
+            preloadStatusDiv.style.display = 'none';
+            document.getElementById("startAnimationBtn").disabled = false;
+            document.getElementById("status").innerHTML = `✅ Preloaded ${preloadedLayers.length} frames. Starting animation.`;
+            // Start animation
+            currentAnimFrameIndex = 0;
+            switchToPreloadedFrame(0);
+            animationInterval = setInterval(() => {
+                if (!animationActive) return;
+                let nextIdx = (currentAnimFrameIndex + 1) % animationFramesList.length;
+                switchToPreloadedFrame(nextIdx);
+            }, speed);
+            animationActive = true;
+        }
+    );
+}
+
+function stopAnimationPreload() {
+    if (animationInterval) {
+        clearInterval(animationInterval);
+        animationInterval = null;
+    }
+    animationActive = false;
+    // Optionally clear preloaded layers to free memory? Keep for now.
+    document.getElementById("status").innerHTML = "Animation stopped.";
+}
+
+// Frame slider event
+document.getElementById("frameSlider").addEventListener('input', (e) => {
+    if (animationInterval) { clearInterval(animationInterval); animationInterval = null; animationActive = false; }
+    const idx = parseInt(e.target.value);
+    if (preloadedLayers.length && idx < preloadedLayers.length) {
+        switchToPreloadedFrame(idx);
+    } else if (animationFramesList.length) {
+        // Fallback if not preloaded (should not happen)
+        gotoAnimationFrameFallback(idx);
+    }
+});
+
+async function gotoAnimationFrameFallback(index) {
+    if (!animationFramesList.length) return;
+    index = Math.min(Math.max(0, index), animationFramesList.length-1);
+    const frameStart = animationFramesList[index];
+    const layerName = document.getElementById("animLayer").value;
+    await showLayerForDateFallback(frameStart, layerName);
+    currentAnimFrameIndex = index;
+    updateFrameSliderUI();
+    const frameEnd = addDays(frameStart,16);
+    document.getElementById('mapStartDate').value = frameStart;
+    document.getElementById('mapEndDate').value = frameEnd;
+    document.getElementById('animCurrentDate').innerHTML = `${frameStart} → ${frameEnd}`;
+    if (mode === "pixel" && currentPoint) loadPixelTimeSeries(currentPoint.lat, currentPoint.lon);
+    if (mode === "polygon" && currentProvince && geoLayer) {
+        geoLayer.eachLayer(layer => { if(layer.feature && layer.feature.properties.ADM2_EN === currentProvince) loadPolygonTimeSeries(layer.feature.geometry, currentProvince); });
+    }
+}
+
+async function showLayerForDateFallback(startDate, layerName) {
+    const url = await fetchTileUrl(layerName, startDate);
+    if (!url) return;
+    const newLayer = createTileLayer(url);
+    if (!newLayer) return;
+    newLayer.on('load', () => {
+        if (activeLayer) map.removeLayer(activeLayer);
+        activeLayer = newLayer;
+        activeLayer.addTo(map);
+        updateMapLegend(layerName);
+    });
+    newLayer.addTo(map);
+}
+
+document.getElementById("startAnimationBtn").onclick = startAnimationWithPreload;
+document.getElementById("stopAnimationBtn").onclick = stopAnimationPreload;
+
+// -------- LAYER MANAGEMENT --------
+function loadLayers() {
+    const startDate = document.getElementById("mapStartDate").value;
+    const endDate = document.getElementById("mapEndDate").value;
+    fetch(`/get_ndvi_layers_start_end/?start_date=${startDate}&end_date=${endDate}`)
+        .then(res => res.json())
+        .then(data => {
+            layers = {
+                "NDVI": L.tileLayer(data.ndvi, { bounds: zimBounds, maxBounds: zimBounds, opacity: opacitySlider.value/100 }),
+                "Baseline": L.tileLayer(data.baseline, { bounds: zimBounds, maxBounds: zimBounds, opacity: opacitySlider.value/100 }),
+                "Anomaly": L.tileLayer(data.anomaly, { bounds: zimBounds, maxBounds: zimBounds, opacity: opacitySlider.value/100 }),
+                "VCI": L.tileLayer(data.vci, { bounds: zimBounds, maxBounds: zimBounds, opacity: opacitySlider.value/100 })
+            };
+            showLayer("NDVI");
+            map.fitBounds(zimBounds);
+        })
+        .catch(err => { console.error(err); document.getElementById("status").innerHTML = "❌ Layer load error"; });
+}
+
+function showLayer(name) {
+    if (activeLayer) map.removeLayer(activeLayer);
+    activeLayer = layers[name];
+    if (activeLayer) {
+        activeLayer.addTo(map);
+        activeLayer.setOpacity(opacitySlider.value/100);
+        updateMapLegend(name);
+    }
+}
+
+// -------- GEOJSON, DRAWING, EXPORT --------
+function loadGeoJSON() {
+    fetch('/static/geojson/zimadm2.geojson')
+        .then(res => res.json())
+        .then(data => {
+            geoLayer = L.geoJSON(data, { style: { color: 'yellow', weight: 2 }, onEachFeature: (feature, layer) => {
+                const name = feature.properties.ADM2_EN;
+                layer.bindTooltip(name);
+                layer.on('click', () => { if(mode !== "polygon") return; currentProvince = name; document.getElementById("infoText").innerHTML = `🗺 ${name}`; loadPolygonTimeSeries(feature.geometry, name); });
+            }}).addTo(map);
+        }).catch(err => console.error(err));
+}
+
+function enableDrawing() {
+    const drawControl = new L.Control.Draw({ draw: { polygon: true, rectangle: true, circle: false, polyline: false, marker: false }, edit: { featureGroup: drawnItems, remove: true } });
+    map.addControl(drawControl);
+    map.on('draw:created', (e) => { drawnItems.clearLayers(); drawnItems.addLayer(e.layer); const geom = e.layer.toGeoJSON().geometry; loadPolygonTimeSeries(geom, "Custom region"); document.getElementById("infoText").innerHTML = "✏️ Custom drawn"; map.removeControl(drawControl); });
+}
+
+function exportCSV() {
+    if (!chartDataStore) return alert("No data");
+    let csv = "Date,NDVI,Baseline,Anomaly,VCI\n";
+    for (let i=0; i<chartDataStore.labels.length; i++) {
+        let vciVal = chartDataStore.vci_raw ? chartDataStore.vci_raw[i] : "";
+        csv += `${chartDataStore.labels[i]},${chartDataStore.ndvi_raw[i]},${chartDataStore.baseline[i]},${chartDataStore.anomaly[i]},${vciVal}\n`;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+    a.download = "ndvi_vci_timeseries.csv";
+    a.click();
+}
+function exportPNG() { if(!chart) return alert("No chart"); const a = document.createElement("a"); a.href = chart.toBase64Image(); a.download = "ndvi_chart.png"; a.click(); }
+function reloadAll() { loadLayers(); if(chart) chart.destroy(); chartDataStore=null; document.getElementById("statsContent").innerHTML="No region/pixel selected"; }
+
+function setMode(m) { mode = m; document.getElementById("pixelBtn").classList.toggle("active", m==="pixel"); document.getElementById("polyBtn").classList.toggle("active", m==="polygon"); document.getElementById("infoText").innerHTML = (m==="pixel") ? "Click map" : "Click a province"; if(chart) chart.destroy(); }
+
+// Initialize map
+function initMap() {
+    map = L.map('map').setView([-19,29],6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    map.addLayer(drawnItems);
+    loadLayers();
+    loadGeoJSON();
+    document.getElementById("reloadBtn").onclick = reloadAll;
+    document.getElementById("pixelBtn").onclick = () => setMode("pixel");
+    document.getElementById("polyBtn").onclick = () => setMode("polygon");
+    map.on('click', (e) => { if(mode !== "pixel") return; const {lat,lng}=e.latlng; currentPoint={lat,lng}; document.getElementById("infoText").innerHTML = `📍 Pixel: ${lat.toFixed(3)}, ${lng.toFixed(3)}`; loadPixelTimeSeries(lat,lng); });
+    map.fitBounds(zimBounds);
+}
+initMap();
+</script>
+</body>
+</html>
