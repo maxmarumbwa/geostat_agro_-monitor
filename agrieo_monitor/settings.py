@@ -19,30 +19,6 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# settings.py or a dedicated ee_config.py
-import ee
-from google.oauth2 import service_account
-
-# Path to your downloaded JSON key file
-SERVICE_ACCOUNT_KEY_FILE = BASE_DIR / "gee_key" / "ee-key.json"
-
-# The service account email
-SERVICE_ACCOUNT_EMAIL = "ee-django-app@ee-cloud-maxmarumbwa.iam.gserviceaccount.com"
-DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520  # 20 MB
-
-
-def initialize_earth_engine():
-    """Initialize Earth Engine with service account credentials"""
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_KEY_FILE, scopes=["https://www.googleapis.com/auth/earthengine"]
-    )
-
-    # Initialize Earth Engine
-    ee.Initialize(credentials)
-
-    # Optional: verify initialization
-    print(ee.Image("NASA/NASADEM_HGT/001").getInfo())
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
