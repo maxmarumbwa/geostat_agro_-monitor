@@ -1,0 +1,1 @@
+web: gunicorn agrieo_monitor.wsgi:application

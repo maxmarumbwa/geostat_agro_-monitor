@@ -1,7 +1,11 @@
 django
 djangorestframework
+gunicorn
+whitenoise
 python-dotenv
-earthengine-ap
+earthengine-api
+google-auth
 geemap
 geopandas
 shapely
+

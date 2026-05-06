@@ -3,3 +3,4 @@ static/key/ee-key.json
 env/
 draft_html/
 *.ee-key.json
+.env
