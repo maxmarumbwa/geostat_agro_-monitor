@@ -2,3 +2,4 @@ gee_key/ee-key.json
 static/key/ee-key.json
 env/
 draft_html/
+*.ee-key.json
