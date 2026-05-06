@@ -24,7 +24,7 @@ import ee
 from google.oauth2 import service_account
 
 # Path to your downloaded JSON key file
-SERVICE_ACCOUNT_KEY_FILE = BASE_DIR / "static" / "key" / "ee-key.json"
+SERVICE_ACCOUNT_KEY_FILE = BASE_DIR / "gee_key" / "ee-key.json"
 
 # The service account email
 SERVICE_ACCOUNT_EMAIL = "ee-django-app@ee-cloud-maxmarumbwa.iam.gserviceaccount.com"
